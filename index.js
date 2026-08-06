@@ -6,14 +6,10 @@ import cfonts from "cfonts";
 import { execa } from "execa";
 import ora from "ora";
 import path from "path"
+
 const program = new Command();
 
-const CONFIG = path.join(process.cwd(),"/flareConfig.json")
-
-
-
-
-
+const CONFIG = path.join(process.cwd(), "flareConfig.json") // removed the /
 
 // FUNCTIONS / HELPERS
 async function clearScreen(){
@@ -29,7 +25,7 @@ function center(text) {
 
 async function banner() {
   await clearScreen();
-  
+
   cfonts.say("FLARE", {
     font: "block",
     align: "center",
@@ -40,45 +36,42 @@ async function banner() {
   });
 
   console.log(center(chalk.bold("Fastest Way to Scaffold and Manage Projects")));
-  console.log(); 
+  console.log();
   console.log(center(chalk.gray.bold("> Run 'flare init' to Lock In!")))
   console.log();
 }
 
-program.action(async () => {
-  await banner();
-});
-
-
-//==========================
-// COMMANDS AND COMMANDER.JS 
-
-
-// >> HELPER AND STARTING CMDS
 program
   .name("flare")
   .description("CLI to scaffold and manage projects")
   .version("1.0.0");
 
+// 1. DEFAULT ACTION: only runs when you type just `flare`
+program.action(async () => {
+  await banner();
+  program.help(); // show help after banner
+});
+
+// 2. CLS COMMAND: manual banner
 program
   .command("cls")
-  .description("Clear screen")
+  .description("Clear screen and show banner")
   .action(async () => {
     await banner();
   });
 
+// 3. INIT COMMAND: NO BANNER HERE
+program
+  .command("init")
+  .description("Initialize flare project")
+  .action(async () => {
+    const spinner = ora('Initing Flare...').start();
+    // your init logic here
+    await new Promise(r => setTimeout(r, 1000));
+    spinner.succeed('Flare initialized!');
+  });
 
-// >> FLARE INIT
-
-program.command("init").action(()=>{
-console.log("Initing Flare")
-})
-
-
-//==========================
-
-// MAIN()
-
+// MAIN
 async function main(){
   program.parse();
 }
