@@ -80,7 +80,6 @@ console.log("Initing Flare")
 // MAIN()
 
 async function main(){
-  await banner();
   program.parse();
 }
 
