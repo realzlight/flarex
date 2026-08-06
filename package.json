@@ -1,0 +1,30 @@
+{
+  "name": "flare-cli",
+  "version": "1.0.1",
+  "description": "Fastest way to scaffold and manage projects",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "flare": "index.js"
+  },
+  "files": [
+    "index.js"
+  ],
+  "scripts": {
+    "dev": "node index.js"
+  },
+  "keywords": [
+    "cli",
+    "scaffold",
+    "terminal"
+  ],
+  "author": "zlight",
+  "dependencies": {
+    "@clack/prompts": "^1.7.0",
+    "cfonts": "^3.3.1",
+    "chalk": "^6.0.0",
+    "commander": "^15.0.0",
+    "execa": "^10.0.1",
+    "ora": "^9.4.1"
+  }
+}
