@@ -49,7 +49,6 @@ program
 // 1. DEFAULT ACTION: only runs when you type just `flare`
 program.action(async () => {
   await banner();
-  program.help(); // show help after banner
 });
 
 // 2. CLS COMMAND: manual banner
