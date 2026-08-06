@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "bin": {
-    "flare": "index.js"
+    "flare": "./index.js"
   },
   "files": [
     "index.js"
