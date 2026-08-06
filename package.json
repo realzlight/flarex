@@ -1,6 +1,6 @@
 {
   "name": "flare-cli",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Fastest way to scaffold and manage projects",
   "main": "index.js",
   "type": "module",
