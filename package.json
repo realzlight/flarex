@@ -1,11 +1,11 @@
 {
-  "name": "flare-cli",
+  "name": "flarex",
   "version": "1.0.2",
   "description": "Fastest way to scaffold and manage projects",
   "main": "index.js",
   "type": "module",
   "bin": {
-    "flare": "./index.js"
+    "flare": "index.js"
   },
   "files": [
     "index.js"
