@@ -15,7 +15,7 @@ const defaultConfig = {
     name: "",
     workspace: FLAREX_DIR,
     geminikey: "",
-    isgeminikey: false
+    isgeminikey: false,
     theme: ["cyan","magenta"]
   }
 };
