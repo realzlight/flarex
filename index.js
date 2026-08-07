@@ -114,7 +114,7 @@ program
  
   
 // Main core Logic
-const = FlarexProjects = path.join(os.homedir,"FlarexProjects")
+const FlarexProjects = path.join(os.homedir,"FlarexProjects")
 const flareConfig = path.join(FlarexProjects,"flarexConfig.json")
 const config = {
   "IsInitialized": true,
