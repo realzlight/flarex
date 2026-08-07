@@ -3,14 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import chalk from "chalk";
-import execa from "execa"
+
 const FLAREX_DIR = path.join(os.homedir(), "FlarexProjects");
 const CONFIG_PATH = path.join(FLAREX_DIR, "flarexConfig.json");
-const PROJECTS_PATH = path.join(FLAREX_DIR, "flareProjects.json"); // <-- NEW
+const PROJECTS_PATH = path.join(FLAREX_DIR, "flareProjects.json");
 
 const defaultConfig = {
   IsInitialized: false,
-  version: "1.0.0",
+  version: "1.0.8",
   user: {
     name: "",
     workspace: FLAREX_DIR,
@@ -20,8 +20,8 @@ const defaultConfig = {
 };
 
 const defaultProjects = {
-  version: "1.0.0",
-  projects: [] // [{ name, path, createdAt }]
+  version: "1.0.8",
+  projects: []
 };
 
 try {
@@ -29,30 +29,20 @@ try {
   const configExists = fs.existsSync(CONFIG_PATH);
   const projectsExists = fs.existsSync(PROJECTS_PATH);
 
-  // 1. If EVERYTHING exists, skip. Don't touch David's precious files
+  // If everything exists, just show 1 line and exit
   if (dirExists && configExists && projectsExists) {
-    await execa("flarex",{stdio:"inherit"})
+    console.log(chalk.green("Flarex is installed. Run 'flarex' to start"));
     process.exit(0);
   }
 
-  // 2. Create FlarexProjects folder only if missing
-  if (!dirExists) {
-    fs.mkdirSync(FLAREX_DIR, { recursive: true });
-  }
-
-  // 3. Create flarexConfig.json only if missing
-  if (!configExists) {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
-  }
-
-  // 4. Create flareProjects.json only if missing
-  if (!projectsExists) {
-    fs.writeFileSync(PROJECTS_PATH, JSON.stringify(defaultProjects, null, 2));
-  }
-
-await execa("flarex",{stdio:"inherit"})
-
+  // Create only what's missing
+  if (!dirExists) fs.mkdirSync(FLAREX_DIR, { recursive: true });
+  if (!configExists) fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
+  if (!projectsExists) fs.writeFileSync(PROJECTS_PATH, JSON.stringify(defaultProjects, null, 2));
+  console.log()
+  console.log(chalk.green("Flarex is installed. Run 'flarex' to start"));
+  console.log()
 } catch (err) {
-  console.error(chalk.red("Flarex Bootstrap Error:"), err.message);
+  console.error(chalk.red("Flarex Error:"), err.message);
   process.exit(1);
 }
