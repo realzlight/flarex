@@ -8,7 +8,8 @@ import ora from "ora";
 import path from "path"
 import os from "os"
 import fs from "fs"
-
+import { setTimeout as sleep } from "node:timers/promises";
+import gradient from "gradient-string"
 const program = new Command();
 
 const FLAREX_DIR = path.join(os.homedir(), "FlarexProjects");
@@ -28,13 +29,39 @@ function center(text) {
   return " ".repeat(padding) + text;
 }
 
-async function banner() {
-  await clearScreen();
 
+
+
+function loadConfig() {
+  if (!fs.existsSync(CONFIG_PATH)) return null; 
+  
+  try {
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    return config;
+  } catch {
+    return null;
+  }
+}
+
+function isInit() {
+  const config = loadConfig();
+  if (!config) return false;
+  
+  return config.IsInitialized === true;
+}
+
+
+
+
+async function banner() {
+const graySandwich = gradient(['#4a4a4a', '#ffffff', '#4a4a4a']);
+  const config =  loadConfig()
+const theme = config?.user?.theme || ['cyan', 'magenta']
+  await clearScreen();
   cfonts.say("FLAREX", {
     font: "block",
     align: "center",
-    colors: ["cyan", "white"],
+    colors: theme,
     background: "transparent",
     letterSpacing: 1,
     space: true,
@@ -54,7 +81,8 @@ async function banner() {
         `Lock in, ${name}`
       ];
       const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-      console.log(center(chalk.bold(greeting)));
+      console.log()
+      console.log(center(chalk.bold(graySandwich(greeting))));
     } else {
       console.log(center(chalk.gray.bold("> Run 'flare init' to Lock In!")));
     }
@@ -93,13 +121,25 @@ program
     console.log()
     clack.intro(chalk.bold.cyan("Flarex is Initializing! :)"));
 
-    const { name, geminiKey } = await clack.group({
+    const { name, geminiKey, theme} = await clack.group({
       name: () => clack.text({
         message: "What should we call you?",
         placeholder: "flarex_dev",
         validate: (v) => !v && "Username required"
       }),
 
+	theme: () => clack.select({
+  message: "Pick your Flarex theme",
+  options: [
+    { value: ['cyan', 'magenta'], label: "Cyberpunk" },
+    { value: ['green', 'yellow'], label: "Matrix" },
+    { value: ['blue', 'white'], label: "Ocean" },
+    { value: ['red', 'yellow'], label: "Fire" },
+    { value: ['magentaBright', 'cyanBright'], label: "Neon" },
+    { value: ['gray'], label: "Minimal" }
+  ],
+  initialValue: ['cyan', 'magenta']
+}),
       geminiKey: () => clack.password({
         message: "We Need A Gemini API Key",
         placeholder: "AIza... (leave empty to skip)",
@@ -130,24 +170,27 @@ program
     config.user.name = name;
     config.user.geminikey = geminiKey || "";
     config.user.isgeminikey = !!geminiKey;
+    config.user.theme = theme;
 
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
 
     await new Promise(r => setTimeout(r, 600));
     s.stop(chalk.green("Flarex Locked In!"));
 
-    clack.outro(
-      geminiKey
-        ? `Configured for ${chalk.cyan(name)} with Gemini`
-        : `Configured for ${chalk.cyan(name)} without Gemini`
-    );
+clack.outro(
+  geminiKey
+    ? `Configured for ${chalk.cyan(name)} with Gemini`
+    : `Configured for ${chalk.cyan(name)} without Gemini`
+);
 
-    console.log()
-    console.log()
-    console.log()
-  });
+console.log();
+console.log(chalk.green.bold("FlarexProjects Folder Created (Dont Delete)"));
+console.log();
 
+await sleep(3000)
+banner()
 
+}); // PARENT CLOSING
 // MAIN
 async function main(){
   program.parse();

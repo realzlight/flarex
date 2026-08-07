@@ -27,6 +27,7 @@
     "chalk": "^6.0.0",
     "commander": "^15.0.0",
     "execa": "^10.0.1",
+    "gradient-string": "^3.0.0",
     "ora": "^9.4.1"
   }
 }
