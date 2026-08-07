@@ -6,10 +6,15 @@ import cfonts from "cfonts";
 import { execa } from "execa";
 import ora from "ora";
 import path from "path"
+import os from "os"
+import fs from "fs"
 
 const program = new Command();
 
-const CONFIG = path.join(process.cwd(), "flareConfig.json") // removed the /
+
+
+
+
 
 // FUNCTIONS / HELPERS
 async function clearScreen(){
@@ -26,14 +31,15 @@ function center(text) {
 async function banner() {
   await clearScreen();
 
-  cfonts.say("FLARE", {
-    font: "block",
-    align: "center",
-    colors: ["cyan", "white"],
-    background: "transparent",
-    letterSpacing: 1,
-    space: true,
-  });
+cfonts.say("FLAREX", {
+  font: "block",
+  align: "center",
+  colors: ["cyan", "white"],
+  background: "transparent",
+  letterSpacing: 1,
+  space: true,
+});
+
 
   console.log(center(chalk.bold("Fastest Way to Scaffold and Manage Projects")));
   console.log();
@@ -59,16 +65,89 @@ program
     await banner();
   });
 
-// 3. INIT COMMAND: NO BANNER HERE
+// 3. INIT COMMAND
 program
   .command("init")
   .description("Initialize flare project")
   .action(async () => {
-    const spinner = ora('Initing Flare...').start();
-    // your init logic here
+   console.log()
+   console.log()
+   console.log()
+    clack.intro(chalk.bold.cyan("Flarex is Initializing! :)"));
+
+    const { name, geminiKey } = await clack.group({
+      name: () => clack.text({
+        message: "What should we call you?",
+        placeholder: "flarex_dev",
+        validate: (v) => !v && "Username required"
+      }),
+
+      geminiKey: () => clack.password({
+        message: "We Need A Gemini API Key",
+        placeholder: "AIza... (leave empty to skip)",
+        initialValue: "", // <-- allows empty
+      })
+    }, {
+      onCancel: () => {
+        clack.cancel("Setup cancelled");
+        process.exit(0);
+      }
+    });
+
+
+
+    const s = clack.spinner();
+    s.start(chalk.gray("Flarex is Configuring..."));
     await new Promise(r => setTimeout(r, 1000));
-    spinner.succeed('Flare initialized!');
-  });
+    s.stop(chalk.green("Flarex Locked In!"));
+
+    clack.outro(
+      geminiKey
+        ? `Configured for ${chalk.cyan(name)} with Gemini`
+        : `Configured for ${chalk.cyan(name)} without Gemini`
+
+
+   );
+   console.log()
+   console.log()
+   console.log()
+ 
+  
+// Main core Logic
+const = FlarexProjects = path.join(os.homedir,"FlarexProjects")
+const flareConfig = path.join(FlarexProjects,"flarexConfig.json")
+const config = {
+  "IsInitialized": true,
+  "user": {
+    "name": name,
+    "geminikey": geminiKey || "",
+    "isgeminikey": true
+  },
+}
+
+if (fs.existsSync(FlarexProjects)){
+
+      const raw = fs.readFileSync(flareConfig, "utf-8");
+      const config = JSON.parse(raw);
+
+      config.IsInitialized = true;
+      config.user.name = name;
+      config.user.geminikey = geminiKey || "";
+      config.user.isgeminikey = !!geminiKey;
+
+      fs.writeFileSync(flareConfig, JSON.stringify(config, null, 2));
+
+
+}else{
+console.log()
+console.log(chalk.red.bold("Re-Instsll Flarex CLI"))
+console.log()
+}
+
+
+}); // Parent Closing
+
+
 
 // MAIN
 async function main(){
