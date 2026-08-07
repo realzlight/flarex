@@ -8,10 +8,11 @@
     "flarex": "index.js"
   },
   "files": [
-    "index.js"
+    "index.js",
+    "bootstrap.js"
   ],
   "scripts": {
-    "postinstall":"node bootstrap.js"
+    "postinstall": "node bootstrap.js",
     "dev": "node index.js"
   },
   "keywords": [
