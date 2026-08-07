@@ -1,6 +1,6 @@
 {
   "name": "flarex",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Fastest way to scaffold and manage projects",
   "main": "index.js",
   "type": "module",
