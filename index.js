@@ -16,7 +16,7 @@ const program = new Command();
 
 const FLAREX_DIR = path.join(os.homedir(), "FlarexProjects");
 const CONFIG_PATH = path.join(FLAREX_DIR, "flarexConfig.json");
-const PROJECTS_PATH = path.join(FLAREX_DIR, "flareProjects.json");
+const PROJECTS_PATH = path.join(FLAREX_DIR, "flarexProjects.json");
 
 
 // FUNCTIONS / HELPERS
@@ -105,6 +105,42 @@ const theme = config?.user?.theme || ['cyan', 'magenta']
   console.log();
 }
 
+
+function readProjects() {
+  if (!fs.existsSync(PROJECTS_PATH)) {
+    return [];
+  }
+  return JSON.parse(fs.readFileSync(PROJECTS_PATH, "utf8"));
+}
+
+function writeProjects(projects) {
+  fs.writeFileSync(PROJECTS_PATH, JSON.stringify(projects, null, 2));
+}
+
+
+async function syncAllProjectsGit() {
+  const projects = readProjects();
+  
+  for (const project of projects.projects) {
+    const gitDir = path.join(project.path, ".git");
+    project.git.initialized = fs.existsSync(gitDir);
+
+    if (project.git.initialized) {
+      try {
+        const remote = await execa("git", ["config", "--get", "remote.origin.url"], {
+          cwd: project.path,
+        });
+        project.git.remote = remote.stdout.trim();
+      } catch {
+        project.git.remote = null;
+      }
+    }
+  }
+
+  writeProjects(projects);
+}
+
+// PROGRAMS
 program
   .name("flare")
   .description("CLI to scaffold and manage projects")
@@ -211,87 +247,106 @@ program
   .description("CREATE AND SETUP PROJECT COMPLETELY AND STORE IN FlareProjects FOLDER")
   .action(async () => {
 
-  if (isInit()){
+    if (!isInit()) {
+      console.log()
+      console.log()
+      msg("You are not initialized, before initializing you can't do this. RUN 'flarex init' to initialize!");
+      console.log()
+      console.log()
+      return;
+    }
 
-        console.log()
-        clack.intro("Flarex Locking in... ")
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex"));
 
+    const { projectname, template } = await clack.group(
+      {
+        projectname: () =>
+          clack.text({
+            message: "What would you name your project?",
+            placeholder: "MyApp...",
+            validate: (v) => !v && "Project name is required",
+          }),
+        template: () =>
+          clack.select({
+            message: "What is your project type?",
+            options: [
+              { value: "MERN", label: "MERN Stack" },
+              { value: "Express", label: "Express" },
+              { value: "React", label: "React + Vite" },
+            ],
+          }),
+      },
+      {
+        onCancel: () => {
+          clack.cancel("Setup cancelled");
+          process.exit(0);
+        },
+      }
+    );
 
-const { projectname, template } = await clack.group({
-  projectname: () => clack.text({
-    message: "What Would You Name Your Project?",
-    placeholder: "MyApp...",
-    validate: (v) => !v && "Project Name Is Required"
-  }),
+    if (template === "MERN") {
+      const safeName = projectname.trim().replace(/\s+/g, "-").toLowerCase();
+      const FLAREX_DIR = path.join(os.homedir(), "FlarexProjects");
+      const FullPath = path.join(FLAREX_DIR, safeName);
+      const serverPath = path.join(FullPath, "server");
+      const clientPath = path.join(FullPath, "client");
 
-  template: () => clack.select({
-    message: "What Is Your Project Type",
-    options: [
-      { value: 'MERN', label: "Mern Stack" },
-      { value: 'Express', label: "Express" },
-      { value: 'React', label: "React + Vite" }
-    ],
-  }),
-}, {
-  onCancel: () => {
-    clack.cancel("Setup cancelled");
-    process.exit(0);
-  }
-});
-        if (template === "MERN"){
-                console.log()
-                console.log(chalk.bold(`Flarex Is Starting to Set Up ${projectname}`))
-                console.log()
-                const s = clack.spinner()
-                s.start("Flarex Is Cooking...")
-                console.log()
-                const safeName = projectname.trim().replace(/\s+/g, '-').toLowerCase();
-                const FLAREX_DIR = path.join(os.homedir(), "FlarexProjects");
-                const FullPath = path.join(FLAREX_DIR,safeName)
-                fs.mkdirSync(FullPath, {recursive:true})
+      fs.mkdirSync(FullPath, { recursive: true });
 
-                console.log(chalk.bold(`• ✓ Flarex Created ${safeName}`))
+      const s = clack.spinner();
 
-                const serverPath = path.join(FullPath,"server")
-                fs.mkdirSync(serverPath, {recursive:true})
-                await execa("npm",["init","-y"],{stdio:"ignore",cwd:serverPath})
+      // ---------------- SERVER ----------------
+      console.log();
+      clack.log.step(chalk.bold("Flarex setting up server"));
 
-                const packageJsonPath = path.join(serverPath,"package.json")
-                const packageJson = JSON.parse(fs.readFileSync(packageJsonPath,"utf8"))
+      s.start("Creating server folder");
+      fs.mkdirSync(serverPath, { recursive: true });
+      s.stop(chalk.green("✓") + " Server folder created");
 
-                packageJson.name = safeName;
-                packageJson.type = "module";
-                packageJson.description = "Made with Flarex";
-                packageJson.scripts = {
-                  ...packageJson.scripts,
-                          dev: `node index.js`,
-                          start: `node index.js`
-                        };
+      s.start("Initializing package.json");
+      await execa("npm", ["init", "-y"], { stdio: "ignore", cwd: serverPath });
+      s.stop(chalk.green("✓") + " package.json initialized");
 
-                fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
-                console.log(chalk.bold("• ✓ Flarex Created and Configured 'package.json'"))
+      s.start("Installing server dependencies");
+      await execa("npm", ["install", "express", "cors", "dotenv"], {
+        stdio: "ignore",
+        cwd: serverPath,
+      });
+      s.stop(chalk.green("✓") + " Dependencies installed (express, cors, dotenv)");
 
+      s.start("Configuring package.json");
+      const packageJsonPath = path.join(serverPath, "package.json");
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+      packageJson.name = safeName;
+      packageJson.type = "module";
+      packageJson.description = "Made with Flarex";
+      packageJson.scripts = {
+        ...packageJson.scripts,
+        dev: "node index.js",
+        start: "node index.js",
+      };
+      fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
+      s.stop(chalk.green("✓") + " package.json configured");
 
-                // WRTING GITIGNORE
-                const gitignorePath = path.join(FullPath, '.gitignore');
-
-const gitignoreContent = `node_modules/
+      s.start("Writing .gitignore");
+      fs.writeFileSync(
+        path.join(FullPath, ".gitignore"),
+        `node_modules/
 dist/
 .env
 .DS_Store
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-`;
+`
+      );
+      s.stop(chalk.green("✓") + " .gitignore written");
 
-                fs.writeFileSync(gitignorePath, gitignoreContent);
-                console.log(chalk.bold("• ✓ Flarex Configured '.gitignore'"))
-
-
-                // INDEX.JS
-fs.writeFileSync(
-path.join(serverPath, 'index.js'),
-`import 'dotenv/config';
+      s.start("Writing index.js");
+      fs.writeFileSync(
+        path.join(serverPath, "index.js"),
+        `import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 
@@ -312,28 +367,361 @@ app.listen(PORT, () => {
   console.log(\`Server running on http://localhost:\${PORT}\`);
 });
 `
-);
+      );
+      s.stop(chalk.green("✓") + " index.js written");
 
+      // ---------------- CLIENT ----------------
+      console.log();
+      clack.log.step(chalk.bold("Flarex setting up client"));
 
+      s.start("Scaffolding Vite + React app");
+      await execa(
+        "npm",
+        ["create", "vite@latest", "client", "--", "--template", "react"],
+        { stdio: "ignore", cwd: FullPath }
+      );
+      s.stop(chalk.green("✓") + " Vite + React app created");
 
-                s.stop("Flarex Is Done Cooking!!")
+      s.start("Installing client dependencies");
+      await execa("npm", ["install"], { stdio: "ignore", cwd: clientPath });
+      await execa("npm", ["install", "axios", "react-router-dom"], {
+        stdio: "ignore",
+        cwd: clientPath,
+      });
+      s.stop(chalk.green("✓") + " Dependencies installed (axios, react-router-dom)");
+
+      s.start("Cleaning up boilerplate");
+      const srcPath = path.join(clientPath, "src");
+      const publicPath = path.join(clientPath, "public");
+
+      [
+        path.join(srcPath, "App.css"),
+        path.join(srcPath, "assets", "react.svg"),
+        path.join(publicPath, "vite.svg"),
+      ].forEach((f) => {
+        if (fs.existsSync(f)) fs.rmSync(f, { force: true });
+      });
+
+      fs.writeFileSync(
+        path.join(srcPath, "index.css"),
+        `* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+`
+      );
+      s.stop(chalk.green("✓") + " Boilerplate cleaned");
+
+      s.start("Writing App.jsx");
+      fs.writeFileSync(
+        path.join(srcPath, "App.jsx"),
+        `function App() {
+  return (
+    <div>
+      <h1>${projectname}</h1>
+    </div>
+  );
+}
+
+export default App;
+`
+      );
+      s.stop(chalk.green("✓") + " App.jsx written");
+
+      s.start("Writing main.jsx");
+      fs.writeFileSync(
+        path.join(srcPath, "main.jsx"),
+        `import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import App from './App.jsx';
+import './index.css';
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </StrictMode>
+);
+`
+      );
+      s.stop(chalk.green("✓") + " main.jsx written");
+
+      
+    console.log();
+    clack.outro(chalk.green("Flarex set up everything for you"))
+    console.log()
+    console.log(chalk.dim("SUMMARY - Flarex didn't created '.env'. It sets type to module in 'package.json'. Flarex created and configured '.gitignore' and you'll not push node_modules to github. Its Better You LOOK Around a bit and Check the DIR. Flarex Installed Cors, dotenv and express. You are ready to code without wasting 30min in setting up files!"))
+    console.log()
+const FinalPath = path.join(os.homedir(),"FlarexProjects",safeName)
+console.log(`Flarex created ${safeName} at ${FinalPath}. That's where Flarex stores all projects and it gets organized there!`)
+console.log()
+    console.log()
 
 
-        console.log()
-        clack.outro(chalk.green("Flarex Set Up Everything For You.."))
-  }else{
-        msg("!Init")
-  }
+const projects = readProjects();
+
+projects.projects.push({
+  name: projectname,
+  safeName: safeName,
+  path: FullPath,
+  status: "active",
+  git: {
+    initialized: false,
+    remote: null,
+  },
+});
+
+writeProjects(projects);
+    } // MERN
 
 
-}) // Parent Closing
+
+if (template === "Express") {
+      const safeName = projectname.trim().replace(/\s+/g, "-").toLowerCase();
+      const FLAREX_DIR = path.join(os.homedir(), "FlarexProjects");
+      const FullPath = path.join(FLAREX_DIR, safeName);
+
+      fs.mkdirSync(FullPath, { recursive: true });
+
+      const s = clack.spinner();
+
+      // ---------------- EXPRESS ----------------
+      console.log();
+      clack.log.step(chalk.bold("Flarex setting up Express project"));
+
+      s.start("Initializing package.json");
+      await execa("npm", ["init", "-y"], { stdio: "ignore", cwd: FullPath });
+      s.stop(chalk.green("✓") + " package.json initialized");
+
+      s.start("Installing dependencies");
+      await execa("npm", ["install", "express", "cors", "dotenv"], {
+        stdio: "ignore",
+        cwd: FullPath,
+      });
+      s.stop(chalk.green("✓") + " Dependencies installed (express, cors, dotenv)");
+
+      s.start("Configuring package.json");
+      const packageJsonPath = path.join(FullPath, "package.json");
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+      packageJson.name = safeName;
+      packageJson.type = "module";
+      packageJson.description = "Made with Flarex";
+      packageJson.scripts = {
+        ...packageJson.scripts,
+        dev: "node index.js",
+        start: "node index.js",
+      };
+      fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
+      s.stop(chalk.green("✓") + " package.json configured");
+
+      s.start("Writing .gitignore");
+      fs.writeFileSync(
+        path.join(FullPath, ".gitignore"),
+        `node_modules/
+dist/
+.env
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+`
+      );
+      s.stop(chalk.green("✓") + " .gitignore written");
+
+      s.start("Writing index.js");
+      fs.writeFileSync(
+        path.join(FullPath, "index.js"),
+        `import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// middleware
+app.use(cors());
+app.use(express.json());
+
+// routes
+app.get('/', (req, res) => {
+  res.json({ message: 'Flarex server is running 🚀' });
+});
+
+// start server
+app.listen(PORT, () => {
+  console.log(\`Server running on http://localhost:\${PORT}\`);
+});
+`
+      );
+
+      s.stop(chalk.green("✓") + " index.js written");
+
+console.log()
+console.log(chalk.green("Flarex set up everything for you"))
+console.log()
+const FinalPath = path.join(os.homedir(),"FlarexProjects",safeName)
+console.log(`Flarex created ${safeName} at ${FinalPath}. That's where Flarex stores all projects and it gets organized there!`)
+console.log()
+
+
+console.log()
+const projects = readProjects();
+
+projects.projects.push({
+  name: projectname,
+  safeName: safeName,
+  path: FullPath,
+  status: "active",
+  git: {
+    initialized: false,
+    remote: null,
+  },
+});
+
+writeProjects(projects);
+    } // EXORESS 
 
 
 
 
+if (template === "React") {
+      const safeName = projectname.trim().replace(/\s+/g, "-").toLowerCase();
+      const FLAREX_DIR = path.join(os.homedir(), "FlarexProjects");
+      const FullPath = path.join(FLAREX_DIR, safeName);
 
+      fs.mkdirSync(FullPath, { recursive: true });
+
+      const s = clack.spinner();
+
+      // ---------------- CLIENT ----------------
+      console.log();
+      clack.log.step(chalk.bold("Flarex setting up client"));
+
+      s.start("Scaffolding Vite + React app");
+      await execa(
+        "npm",
+        ["create", "vite@latest", ".", "--", "--template", "react", "--force"],
+        { stdio: "ignore", cwd: FullPath }
+      );
+      s.stop(chalk.green("✓") + " Vite + React app created");
+
+      s.start("Installing dependencies");
+      await execa("npm", ["install"], { stdio: "ignore", cwd: FullPath });
+      await execa("npm", ["install", "axios", "react-router-dom"], {
+        stdio: "ignore",
+        cwd: FullPath,
+      });
+      s.stop(chalk.green("✓") + " Dependencies installed (axios, react-router-dom)");
+
+      s.start("Cleaning up boilerplate");
+      const srcPath = path.join(FullPath, "src");
+      const publicPath = path.join(FullPath, "public");
+
+      [
+        path.join(srcPath, "App.css"),
+        path.join(srcPath, "assets", "react.svg"),
+        path.join(publicPath, "vite.svg"),
+      ].forEach((f) => {
+        if (fs.existsSync(f)) fs.rmSync(f, { force: true });
+      });
+
+      fs.writeFileSync(
+        path.join(srcPath, "index.css"),
+        `* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+`
+      );
+      s.stop(chalk.green("✓") + " Boilerplate cleaned");
+
+      s.start("Writing App.jsx");
+      fs.writeFileSync(
+        path.join(srcPath, "App.jsx"),
+        `function App() {
+  return (
+    <div>
+      <h1>${projectname}</h1>
+    </div>
+  );
+}
+
+export default App;
+`
+      );
+      s.stop(chalk.green("✓") + " App.jsx written");
+
+      s.start("Writing main.jsx");
+      fs.writeFileSync(
+        path.join(srcPath, "main.jsx"),
+        `import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import App from './App.jsx';
+import './index.css';
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </StrictMode>
+);
+`
+      );
+      s.stop(chalk.green("✓") + " main.jsx written");
+
+console.log()
+console.log(chalk.green("Flarex set up everything for you"))
+console.log()
+const FinalPath = path.join(os.homedir(),"FlarexProjects",safeName)
+console.log(`Flarex created ${safeName} at ${FinalPath}. That's where Flarex stores all projects and it gets organized there!`)
+console.log()
+
+console.log()
+
+const projects = readProjects();
+
+projects.projects.push({
+  name: projectname,
+  safeName: safeName,
+  path: FullPath,
+  status: "active",
+  git: {
+    initialized: false,
+    remote: null,
+  },
+});
+
+writeProjects(projects);
+
+    } // REACT 
+
+  }); // PARENT CLOSING flare create
+
+
+program
+  .command("sync")
+  .description("Sync git status for all projects")
+  .action(async () => {
+    const s = clack.spinner();
+    s.start("Syncing all projects");
+    await syncAllProjectsGit();
+    s.stop(chalk.green("✓") + " All projects synced");
+    console.log()
+  });
 
 
 

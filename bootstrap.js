@@ -6,7 +6,7 @@ import chalk from "chalk";
 
 const FLAREX_DIR = path.join(os.homedir(), "FlarexProjects");
 const CONFIG_PATH = path.join(FLAREX_DIR, "flarexConfig.json");
-const PROJECTS_PATH = path.join(FLAREX_DIR, "flareProjects.json");
+const PROJECTS_PATH = path.join(FLAREX_DIR, "flarexProjects.json");
 
 const defaultConfig = {
   IsInitialized: false,
@@ -21,7 +21,6 @@ const defaultConfig = {
 };
 
 const defaultProjects = {
-  version: "1.0.8",
   projects: []
 };
 
