@@ -56,7 +56,18 @@ function isInit() {
   return config.IsInitialized === true;
 }
 
-
+function forceInit(){
+const init = isInit()
+if (!init){
+console.log()
+console.log()
+msg("You aren't initialized. RUN 'flare init' to Initialize")
+console.log()
+console.log()
+}else{
+return "Inited"
+}
+}
 
 
 async function banner() {
@@ -140,6 +151,10 @@ async function syncAllProjectsGit() {
   writeProjects(projects);
 }
 
+
+
+// GIT SCAN
+syncAllProjectsGit()
 // PROGRAMS
 program
   .name("flare")
@@ -167,7 +182,7 @@ program
     console.log()
     console.log()
     console.log()
-    clack.intro(chalk.bold.cyan("Flarex is Initializing! :)"));
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Initialize"));
 
     const { name, geminiKey, theme} = await clack.group({
       name: () => clack.text({
@@ -246,7 +261,7 @@ program
   .command("create")
   .description("CREATE AND SETUP PROJECT COMPLETELY AND STORE IN FlareProjects FOLDER")
   .action(async () => {
-
+  await syncAllProjectsGit()
     if (!isInit()) {
       console.log()
       console.log()
@@ -257,7 +272,7 @@ program
     }
 
     console.log();
-    clack.intro(chalk.bold.hex("#f97316")("Flarex"));
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Create"));
 
     const { projectname, template } = await clack.group(
       {
@@ -712,6 +727,8 @@ writeProjects(projects);
   }); // PARENT CLOSING flare create
 
 
+
+// SYNC CMD
 program
   .command("sync")
   .description("Sync git status for all projects")
@@ -721,6 +738,99 @@ program
     await syncAllProjectsGit();
     s.stop(chalk.green("✓") + " All projects synced");
     console.log()
+  });
+
+
+//  SWITCH CMD
+program
+  .command("switch [projectName]")
+  .description("Switch to a Flarex project")
+  .action(async (projectName) => {
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Switch"));
+
+    const projects = readProjects();
+
+    if (!projects.projects || projects.projects.length === 0) {
+      console.log();
+      clack.log.error("No projects found");
+      console.log();
+      return;
+    }
+
+    let selected;
+
+    if (projectName) {
+      // Direct project name provided
+      const project = projects.projects.find(
+        (p) => p.safeName === projectName.toLowerCase()
+      );
+
+      if (!project) {
+        console.log();
+        clack.log.error(`Project "${projectName}" not found`);
+        console.log();
+        return;
+      }
+
+      selected = project.path;
+      console.log();
+      clack.log.step(`Switching to ${chalk.bold(project.name)}`);
+    } else {
+      // Show selection menu
+      console.log();
+      selected = await clack.select({
+        message: "Select a project to switch to",
+        options: projects.projects.map((p) => ({
+          value: p.path,
+          label: p.name,
+        })),
+      });
+    }
+
+    console.log();
+    const shell = process.platform === "win32" ? "cmd.exe" : "bash";
+    await execa(shell, { cwd: selected, stdio: "inherit" });
+  });
+
+
+
+
+// LIST CMD
+program
+  .command("list")
+  .description("List all Flarex projects")
+  .action(async () => {
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Projects"));
+
+    const projects = readProjects();
+
+    if (!projects.projects || projects.projects.length === 0) {
+      console.log();
+      clack.log.warn("No projects found");
+      console.log();
+      return;
+    }
+
+    console.log();
+    projects.projects.forEach((project, index) => {
+      const gitStatus = project.git.initialized
+        ? chalk.green("✓ Git")
+        : chalk.gray("○ No Git");
+
+      const gitRemote = project.git.remote ? chalk.dim(`(${project.git.remote})`) : "";
+
+      console.log(
+        chalk.bold(`${index + 1}. ${project.name}`) +
+          chalk.dim(` [${project.template || "Unknown"}]`)
+      );
+      console.log(chalk.dim(`   Path: ${project.path}`));
+      console.log(chalk.dim(`   Status: ${gitStatus} ${gitRemote}`));
+      console.log();
+    });
+
+    clack.outro(`Total: ${projects.projects.length} project${projects.projects.length !== 1 ? "s" : ""}`);
   });
 
 
