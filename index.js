@@ -128,6 +128,39 @@ function writeProjects(projects) {
   fs.writeFileSync(PROJECTS_PATH, JSON.stringify(projects, null, 2));
 }
 
+async function syncAllProjects() {
+  const projects = readProjects();
+  const validProjects = [];
+
+  for (const project of projects.projects) {
+    // Remove if path doesn't exist
+    if (!fs.existsSync(project.path)) {
+      continue;
+    }
+
+    project.status = "active";
+
+    // Check git
+    const gitDir = path.join(project.path, ".git");
+    project.git.initialized = fs.existsSync(gitDir);
+
+    if (project.git.initialized) {
+      try {
+        const remote = await execa("git", ["config", "--get", "remote.origin.url"], {
+          cwd: project.path,
+        });
+        project.git.remote = remote.stdout.trim();
+      } catch {
+        project.git.remote = null;
+      }
+    }
+
+    validProjects.push(project);
+  }
+
+  projects.projects = validProjects;
+  writeProjects(projects);
+}
 
 async function syncAllProjectsGit() {
   const projects = readProjects();
@@ -152,9 +185,9 @@ async function syncAllProjectsGit() {
 }
 
 
-
 // GIT SCAN
 syncAllProjectsGit()
+syncAllProjects()
 // PROGRAMS
 program
   .name("flare")
@@ -486,6 +519,7 @@ projects.projects.push({
   name: projectname,
   safeName: safeName,
   path: FullPath,
+  template:template,
   status: "active",
   git: {
     initialized: false,
@@ -593,6 +627,7 @@ projects.projects.push({
   name: projectname,
   safeName: safeName,
   path: FullPath,
+  template:template,
   status: "active",
   git: {
     initialized: false,
@@ -713,6 +748,7 @@ projects.projects.push({
   name: projectname,
   safeName: safeName,
   path: FullPath,
+  template:template,
   status: "active",
   git: {
     initialized: false,
@@ -736,6 +772,7 @@ program
     const s = clack.spinner();
     s.start("Syncing all projects");
     await syncAllProjectsGit();
+    await syncAllProjects()
     s.stop(chalk.green("✓") + " All projects synced");
     console.log()
   });
@@ -801,6 +838,8 @@ program
   .command("list")
   .description("List all Flarex projects")
   .action(async () => {
+    await syncAllProjects()
+    await syncAllProjectsGit()
     console.log();
     clack.intro(chalk.bold.hex("#f97316")("Flarex Projects"));
 
@@ -815,6 +854,9 @@ program
 
     console.log();
     projects.projects.forEach((project, index) => {
+      const statusColor = project.status === "active" ? chalk.green : chalk.gray;
+      const statusBadge = project.status === "active" ? "● Active" : "○ Inactive";
+
       const gitStatus = project.git.initialized
         ? chalk.green("✓ Git")
         : chalk.gray("○ No Git");
@@ -826,13 +868,171 @@ program
           chalk.dim(` [${project.template || "Unknown"}]`)
       );
       console.log(chalk.dim(`   Path: ${project.path}`));
-      console.log(chalk.dim(`   Status: ${gitStatus} ${gitRemote}`));
+      console.log(statusColor(`   ${statusBadge}`) + chalk.dim(` | ${gitStatus} ${gitRemote}`));
       console.log();
     });
 
     clack.outro(`Total: ${projects.projects.length} project${projects.projects.length !== 1 ? "s" : ""}`);
   });
 
+// ADD
+
+program
+  .command("add <folderName>")
+  .description("Add existing project from home to FlarexProjects")
+  .action(async (folderName) => {
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Add"));
+
+    const homePath = os.homedir();
+    const sourcePath = path.join(homePath, folderName);
+    const FLAREX_DIR = path.join(homePath, "FlarexProjects");
+    const safeName = folderName.trim().replace(/\s+/g, "-").toLowerCase();
+    const destPath = path.join(FLAREX_DIR, safeName);
+
+    const s = clack.spinner();
+
+    console.log();
+    s.start("Checking project folder");
+    if (!fs.existsSync(sourcePath)) {
+      console.log();
+      clack.log.error(`Project "${folderName}" not found in home directory`);
+      console.log();
+      return;
+    }
+    s.stop(chalk.green("✓") + " Project found");
+
+    console.log();
+    s.start("Moving project to FlarexProjects");
+    fs.mkdirSync(FLAREX_DIR, { recursive: true });
+    if (fs.existsSync(destPath)) {
+      clack.log.error(`Project already exists at ${destPath}`);
+      console.log();
+      return;
+    }
+    fs.renameSync(sourcePath, destPath);
+    s.stop(chalk.green("✓") + " Project moved");
+
+    console.log();
+    s.start("Detecting template");
+    let template = "Unknown";
+    const hasServer = fs.existsSync(path.join(destPath, "server"));
+    const hasClient = fs.existsSync(path.join(destPath, "client"));
+    const hasSrc = fs.existsSync(path.join(destPath, "src"));
+
+    if (hasServer && hasClient) {
+      template = "MERN";
+    } else if (hasSrc && !hasServer) {
+      template = "React";
+    } else if (fs.existsSync(path.join(destPath, "package.json"))) {
+      template = "Express";
+    }
+    s.stop(chalk.green("✓") + ` Template detected: ${template}`);
+
+    console.log();
+    s.start("Checking git status");
+    let gitInitialized = false;
+    let gitRemote = null;
+
+    const gitDir = path.join(destPath, ".git");
+    if (fs.existsSync(gitDir)) {
+      gitInitialized = true;
+      try {
+        const remote = await execa("git", ["config", "--get", "remote.origin.url"], {
+          cwd: destPath,
+        });
+        gitRemote = remote.stdout.trim();
+      } catch {
+        gitRemote = null;
+      }
+    }
+    s.stop(chalk.green("✓") + ` Git: ${gitInitialized ? "✓" : "○"}`);
+
+    console.log();
+    s.start("Registering project");
+    const projects = readProjects();
+    projects.projects.push({
+      name: folderName,
+      safeName: safeName,
+      path: destPath,
+      template: template,
+      status: "active",
+      git: {
+        initialized: gitInitialized,
+        remote: gitRemote,
+      },
+    });
+    writeProjects(projects);
+    s.stop(chalk.green("✓") + " Project registered");
+
+    console.log();
+    clack.outro(chalk.green(`"${folderName}" added as ${template}`));
+  });
+
+// REMOVE
+program
+  .command("remove <projectName>")
+  .description("Remove project from Flarex and move back to home")
+  .action(async (projectName) => {
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Remove"));
+
+    const projects = readProjects();
+    const project = projects.projects.find(
+      (p) => p.safeName === projectName.toLowerCase()
+    );
+
+    if (!project) {
+      console.log();
+      clack.log.error(`Project "${projectName}" not found`);
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.log.step(`Removing ${chalk.bold(project.name)}`);
+    console.log(chalk.dim(`Path: ${project.path}`));
+    console.log();
+
+    const confirmed = await clack.confirm({
+      message: "Move project back to home and remove from Flarex?",
+    });
+
+    if (!confirmed) {
+      console.log();
+      clack.cancel("Remove cancelled");
+      console.log();
+      return;
+    }
+
+    const s = clack.spinner();
+
+    console.log();
+    s.start("Moving project to home");
+    const homePath = os.homedir();
+    const destPath = path.join(homePath, project.name);
+
+    if (fs.existsSync(destPath)) {
+      console.log();
+      clack.log.error(`"${project.name}" already exists in home directory`);
+      console.log();
+      return;
+    }
+
+    fs.renameSync(project.path, destPath);
+    s.stop(chalk.green("✓") + " Project moved to home");
+
+    console.log();
+    s.start("Updating project list");
+    const updatedProjects = projects.projects.filter(
+      (p) => p.safeName !== projectName.toLowerCase()
+    );
+    writeProjects({ projects: updatedProjects });
+    s.stop(chalk.green("✓") + " Project removed from Flarex");
+
+    console.log();
+    clack.outro(chalk.green(`"${project.name}" moved back to home`));
+  });
 
 
 // MAIN
