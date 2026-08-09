@@ -16,6 +16,8 @@ const program = new Command();
 const FLAREX_DIR = path.join(os.homedir(), "FlarexProjects");
 const CONFIG_PATH = path.join(FLAREX_DIR, "flarexConfig.json");
 const PROJECTS_PATH = path.join(FLAREX_DIR, "flarexProjects.json");
+const LOGS_PATH = path.join(FLAREX_DIR, "flarexLog.json");
+
 
 // DOCS
 const FLAREX_DOCS = "No Docs Yet, Will be filled later"
@@ -84,8 +86,9 @@ const theme = config?.user?.theme || ['cyan', 'magenta']
     space: true,
   });
 
-  console.log(center(chalk.bold("Fastest Way to Scaffold and Manage Projects")));
-  console.log(center(chalk.dim("> RUN flarex tutorial")));
+  console.log(center(chalk.bold("Less setup. More ship.")));
+  console.log()
+  console.log(center(chalk.dim("RUN flarex tutorial")));
   console.log();
 
   if (fs.existsSync(CONFIG_PATH)) {
@@ -161,6 +164,21 @@ async function syncAllProjects() {
   projects.projects = validProjects;
   writeProjects(projects);
 }
+
+
+
+
+function readLogs() {
+  if (!fs.existsSync(LOGS_PATH)) {
+    return { logs: [] };
+  }
+  return JSON.parse(fs.readFileSync(LOGS_PATH, "utf8"));
+}
+
+function writeLogs(data) {
+  fs.writeFileSync(LOGS_PATH, JSON.stringify(data, null, 2));
+}
+
 
 async function syncAllProjectsGit() {
   const projects = readProjects();
@@ -1185,6 +1203,48 @@ program
   });
 
 
+program
+  .command("theme")
+  .description("Change your Flarex theme")
+  .action(async () => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Theme"));
+
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+
+    const selectedTheme = await clack.select({
+      message: "Pick your Flarex theme",
+      options: [
+        { value: ["cyan", "magenta"], label: "Cyberpunk" },
+        { value: ["green", "yellow"], label: "Matrix" },
+        { value: ["blue", "white"], label: "Ocean" },
+        { value: ["red", "yellow"], label: "Fire" },
+        { value: ["magentaBright", "cyanBright"], label: "Neon" },
+        { value: ["gray"], label: "Minimal" },
+      ],
+      initialValue: config.user.theme,
+    });
+
+    const s = clack.spinner();
+
+    s.start("Updating theme");
+    config.user.theme = selectedTheme;
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    s.stop(chalk.green("✓") + " Theme updated");
+
+    console.log();
+    clack.outro(chalk.green("Theme applied"));
+    await sleep(2000)
+    banner()
+  });
+
 
 
 program
@@ -1915,6 +1975,127 @@ ${diff}
     console.log();
     clack.outro(chalk.green(`Shipped to ${targetBranch}`));
   });
+
+
+// UTIL CMD
+program
+  .command("log")
+  .description("Log what you shipped today")
+  .action(async () => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    if (!fs.existsSync(PROJECTS_PATH)) {
+      console.log();
+      clack.log.error("No projects found");
+      console.log();
+      return;
+    }
+
+    const projectsData = JSON.parse(fs.readFileSync(PROJECTS_PATH, "utf8"));
+
+    if (!projectsData.projects || projectsData.projects.length === 0) {
+      console.log();
+      clack.log.error("No projects found. Create one first: flarex create");
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Log"));
+
+    const { project, what, hours, status } = await clack.group(
+      {
+        project: () =>
+          clack.select({
+            message: "Which project?",
+            options: projectsData.projects.map((p) => ({
+              value: p.name,
+              label: p.name,
+            })),
+          }),
+        what: () =>
+          clack.text({
+            message: "What did you ship today?",
+            placeholder: "Fixed OCR accuracy, deployed v1.2...",
+            validate: (v) => !v && "This field is required",
+          }),
+        hours: () =>
+          clack.text({
+            message: "How many hours? (optional)",
+            placeholder: "0",
+          }),
+        status: () =>
+          clack.select({
+            message: "Status",
+            options: [
+              { value: "completed", label: "Completed" },
+              { value: "in-progress", label: "In Progress" },
+              { value: "blocked", label: "Blocked" },
+            ],
+          }),
+      },
+      {
+        onCancel: () => {
+          clack.cancel("Log cancelled");
+          process.exit(0);
+        },
+      }
+    );
+
+    const s = clack.spinner();
+
+    s.start("Saving log");
+
+    const logsData = readLogs();
+    const now = new Date();
+
+    logsData.logs.push({
+      date: now.toISOString().split("T")[0],
+      project: project,
+      what: what,
+      hours: hours ? parseFloat(hours) : 0,
+      status: status,
+      timestamp: now.toISOString(),
+    });
+
+    writeLogs(logsData);
+
+    s.stop(chalk.green("✓") + " Log saved");
+
+    // Show today's entries
+    const today = now.toISOString().split("T")[0];
+    const todayLogs = logsData.logs.filter((l) => l.date === today);
+
+    console.log();
+    clack.log.step(chalk.bold(`Today's entries (${todayLogs.length})`));
+    console.log();
+
+    todayLogs.forEach((entry, i) => {
+      const statusColor =
+        entry.status === "completed"
+          ? chalk.green
+          : entry.status === "blocked"
+          ? chalk.red
+          : chalk.yellow;
+
+      console.log(chalk.bold(`${i + 1}. ${entry.project}`));
+      console.log(chalk.dim(`   ${entry.what}`));
+      console.log(
+        statusColor(`   ${entry.status}`) +
+          chalk.dim(entry.hours ? ` | ${entry.hours}h` : "")
+      );
+      console.log();
+    });
+
+    clack.outro(chalk.green("Keep shipping"));
+  });
+
+
 // MAIN
 async function main(){
   program.parse();

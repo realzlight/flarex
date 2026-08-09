@@ -7,6 +7,7 @@ import chalk from "chalk";
 const FLAREX_DIR = path.join(os.homedir(), "FlarexProjects");
 const CONFIG_PATH = path.join(FLAREX_DIR, "flarexConfig.json");
 const PROJECTS_PATH = path.join(FLAREX_DIR, "flarexProjects.json");
+const LOGS_PATH = path.join(FLAREX_DIR, "flarexLog.json");
 
 const defaultConfig = {
   IsInitialized: false,
@@ -24,21 +25,26 @@ const defaultProjects = {
   projects: []
 };
 
+const defaultLogs = {
+  logs: []
+};
+
 try {
   const dirExists = fs.existsSync(FLAREX_DIR);
   const configExists = fs.existsSync(CONFIG_PATH);
   const projectsExists = fs.existsSync(PROJECTS_PATH);
+  const logsExists = fs.existsSync(LOGS_PATH);
 
-  // If everything exists, just show 1 line and exit
-  if (dirExists && configExists && projectsExists) {
+  if (dirExists && configExists && projectsExists && logsExists) {
     console.log(chalk.green("Flarex is installed. Run 'flarex' to start"));
     process.exit(0);
   }
 
-  // Create only what's missing
   if (!dirExists) fs.mkdirSync(FLAREX_DIR, { recursive: true });
   if (!configExists) fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
   if (!projectsExists) fs.writeFileSync(PROJECTS_PATH, JSON.stringify(defaultProjects, null, 2));
+  if (!logsExists) fs.writeFileSync(LOGS_PATH, JSON.stringify(defaultLogs, null, 2));
+  
   console.log()
   console.log(chalk.green("Flarex is installed. Run 'flarex' to start"));
   console.log()
