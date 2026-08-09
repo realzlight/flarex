@@ -1679,6 +1679,8 @@ program
       return;
     }
 
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+
     if (!fs.existsSync(PROJECTS_PATH)) {
       console.log();
       clack.log.error("No projects found");
@@ -1778,14 +1780,92 @@ program
     await execa("git", ["add", addPath], { cwd: projectPath });
     s.stop(chalk.green("✓") + " Files staged");
 
-    const commitMessage = await clack.text({
-      message: "Commit message",
-      placeholder: "Update code",
+    let commitMessage = await clack.text({
+      message: "Enter commit message",
+      placeholder: "Leave empty to auto-generate",
     });
 
-    if (!commitMessage) {
-      clack.cancel("Ship cancelled");
-      return;
+    // Auto-generate if empty
+    if (!commitMessage || !commitMessage.trim()) {
+      if (!config.user.isgeminikey || !config.user.geminikey) {
+        console.log();
+        clack.log.error("No Gemini API key set. Run: flarex gemini <apikey>");
+        console.log();
+        return;
+      }
+
+      s.start("Flarex is writing your commit message");
+
+      const diffResult = await execa("git", ["diff", "--cached"], {
+        cwd: projectPath,
+      });
+      const diff = diffResult.stdout.slice(0, 8000); // cap diff size for token safety
+
+      const commitPrompt = `You are Flarex, a CLI dev assistant. Generate a single-line git commit message based on this diff.
+
+RULES:
+- Use conventional commit style: feat, fix, chore, refactor, docs, style, perf, test
+- One line only, no explanation, no markdown, no quotes
+- Be specific about what changed, not generic like "update code"
+- Max 72 characters
+
+Diff:
+${diff}
+`;
+
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${config.user.geminikey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: commitPrompt }] }],
+            }),
+          }
+        );
+
+        const data = await response.json();
+        const generated = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+        if (!generated) {
+          s.stop(chalk.red("✗") + " Could not generate message");
+          console.log();
+          clack.log.error("Try entering a commit message manually");
+          console.log();
+          return;
+        }
+
+        s.stop(chalk.green("✓") + " Message generated");
+        console.log();
+        console.log(chalk.dim("Generated: ") + chalk.white(generated));
+        console.log();
+
+        const useGenerated = await clack.confirm({
+          message: "Use this commit message?",
+        });
+
+        if (!useGenerated) {
+          const manualMessage = await clack.text({
+            message: "Enter commit message",
+          });
+
+          if (!manualMessage) {
+            clack.cancel("Ship cancelled");
+            return;
+          }
+
+          commitMessage = manualMessage;
+        } else {
+          commitMessage = generated;
+        }
+      } catch (err) {
+        s.stop(chalk.red("✗") + " Failed to generate message");
+        console.log();
+        clack.log.error(err.message);
+        console.log();
+        return;
+      }
     }
 
     s.start("Committing");
