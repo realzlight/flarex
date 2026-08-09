@@ -1035,6 +1035,115 @@ program
   });
 
 
+
+
+
+
+// HELPER CMDS
+program
+  .command("gemini <apikey>")
+  .description("Set your Gemini API key")
+  .action(async (apikey) => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Gemini"));
+
+    const s = clack.spinner();
+
+    console.log();
+    s.start("Updating API key");
+
+    try {
+      const configPath = path.join(os.homedir(), "FlarexProjects","flarexConfig.json");
+      
+      if (!fs.existsSync(configPath)) {
+        throw new Error("Config file not found");
+      }
+
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      config.user.geminikey = apikey;
+      config.user.isgeminikey = true;
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+      s.stop(chalk.green("✓") + " Gemini API key set");
+      console.log();
+      clack.outro("API key updated");
+    } catch (err) {
+      s.stop(chalk.red("✗") + " Failed to update API key");
+      console.log();
+      clack.log.error(err.message);
+      console.log();
+    }
+  });
+
+program
+  .command("name <userName>")
+  .description("Set your name")
+  .action(async (userName) => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Profile"));
+
+    const s = clack.spinner();
+
+    console.log();
+    s.start("Updating name");
+
+    try {
+      const configPath = path.join(os.homedir(),"FlarexProjects", "flarexConfig.json");
+      
+      if (!fs.existsSync(configPath)) {
+        throw new Error("Config file not found");
+      }
+
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      config.user.name = userName;
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+      s.stop(chalk.green("✓") + " Name set");
+      console.log();
+      clack.outro(`Welcome, ${chalk.bold(userName)}`);
+    } catch (err) {
+      s.stop(chalk.red("✗") + " Failed to update name");
+      console.log();
+      clack.log.error(err.message);
+      console.log();
+    }
+  });
+
+
+
+
+program
+  .command("recover")
+  .description("Recover Flarex after missing files/folders")
+  .action(async () => {
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Recover"));
+
+    const s = clack.spinner();
+
+    console.log();
+    s.start("Running recovery");
+    await execa("node", ["bootstrap.js"], { stdio: "inherit" });
+    s.stop(chalk.green("✓") + " Recovery complete");
+
+    console.log();
+    clack.outro("Flarex is ready");
+  });
+
 // MAIN
 async function main(){
   program.parse();
