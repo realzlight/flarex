@@ -1333,7 +1333,7 @@ ${errorMsg}
         }
       });
 
-      clack.outro(chalk.green("Done"));
+      clack.outro(chalk.green("RUN 'flarex fix' so Flarex can tell you the exact error!"));
     } catch (err) {
       s.stop(chalk.red("✗") + " Request failed");
       clack.log.error(err.message);
@@ -1455,6 +1455,386 @@ ${question}
   });
 
 
+
+program
+  .command("fix")
+  .description("Pick a project and file to analyze and fix")
+  .action(async () => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+
+    if (!config.user.isgeminikey || !config.user.geminikey) {
+      console.log();
+      clack.log.error("No Gemini API key set. Run: flarex gemini <apikey>");
+      console.log();
+      return;
+    }
+
+    if (!fs.existsSync(PROJECTS_PATH)) {
+      console.log();
+      clack.log.error("No projects found");
+      console.log();
+      return;
+    }
+
+    const projectsData = JSON.parse(fs.readFileSync(PROJECTS_PATH, "utf8"));
+
+    if (!projectsData.projects || projectsData.projects.length === 0) {
+      console.log();
+      clack.log.error("No projects found");
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Fix"));
+
+    const projectPath = await clack.select({
+      message: "Select a project",
+      options: projectsData.projects.map((p) => ({
+        value: p.path,
+        label: p.name,
+      })),
+    });
+
+    let currentDir = projectPath;
+    let selectedFile = null;
+
+    while (!selectedFile) {
+      const items = fs.readdirSync(currentDir, { withFileTypes: true });
+
+      const filtered = items.filter(
+        (item) => !item.name.startsWith(".") && item.name !== "node_modules"
+      );
+
+      if (filtered.length === 0) {
+        clack.log.warn("Empty folder");
+        break;
+      }
+
+      const options = filtered.map((item) => ({
+        value: item.name,
+        label: item.isDirectory() ? chalk.blue(`📁 ${item.name}`) : `📄 ${item.name}`,
+      }));
+
+      if (currentDir !== projectPath) {
+        options.unshift({ value: "..", label: chalk.dim("← Back") });
+      }
+
+      const choice = await clack.select({
+        message: `Browsing: ${path.relative(projectPath, currentDir) || "/"}`,
+        options,
+      });
+
+      if (choice === "..") {
+        currentDir = path.dirname(currentDir);
+        continue;
+      }
+
+      const fullPath = path.join(currentDir, choice);
+      const stat = fs.statSync(fullPath);
+
+      if (stat.isDirectory()) {
+        currentDir = fullPath;
+      } else {
+        selectedFile = fullPath;
+      }
+    }
+
+    if (!selectedFile) {
+      clack.cancel("No file selected");
+      return;
+    }
+
+    const fileStat = fs.statSync(selectedFile);
+    let fileContent = fs.readFileSync(selectedFile, "utf8");
+
+    if (fileStat.size > 50000) {
+      const sizeKB = Math.round(fileStat.size / 1024);
+      const proceed = await clack.confirm({
+        message: `File is large (${sizeKB}KB). Read first 3000 lines only?`,
+      });
+
+      if (!proceed) {
+        clack.cancel("Cancelled");
+        return;
+      }
+
+      fileContent = fileContent.split("\n").slice(0, 3000).join("\n");
+    }
+
+    const mode = await clack.select({
+      message: "What kind of check?",
+      options: [
+        { value: "quick", label: "Quick check (syntax, indentation, brackets)" },
+        { value: "full", label: "Full review (logic, bugs, best practices)" },
+      ],
+    });
+
+    const s = clack.spinner();
+
+    const loadingStates = mode === "quick"
+      ? ["Flarex is scanning syntax", "Flarex is checking brackets", "Flarex is checking indentation"]
+      : ["Flarex is reading code", "Flarex is analyzing logic", "Flarex is checking patterns"];
+
+    let stateIndex = 0;
+    s.start(loadingStates[0]);
+    const loadingInterval = setInterval(() => {
+      stateIndex = (stateIndex + 1) % loadingStates.length;
+      s.message(loadingStates[stateIndex]);
+    }, 1200);
+
+    const fileName = path.basename(selectedFile);
+
+    const quickPrompt = `You are Flarex, a CLI dev assistant running inside a terminal. You are NOT Gemini and must never mention Gemini, Google, or any model name — you are Flarex.
+
+RULES:
+- This is a raw terminal. Never use markdown code fences or markdown formatting.
+- Write plain text only.
+- ONLY check for: syntax errors, unclosed/stray brackets ({[, mismatched parens, indentation issues, missing semicolons if relevant to the language.
+- Do NOT review logic, architecture, or best practices — this is a fast structural scan only.
+- Keep it short. List issues by line number if possible. If nothing found, say so in one line.
+
+File: ${fileName}
+
+Code:
+${fileContent}
+`;
+
+    const fullPrompt = `You are Flarex, a CLI dev assistant running inside a terminal. You are NOT Gemini and must never mention Gemini, Google, or any model name — you are Flarex.
+
+RULES:
+- This is a raw terminal. Never use markdown code fences or markdown formatting.
+- Write plain text only.
+- Review this code for bugs, logic issues, and best practice violations.
+- Be concise. Point out real issues only, not style nitpicks.
+- Structure as: ISSUES FOUND, then SUGGESTED FIXES.
+
+File: ${fileName}
+
+Code:
+${fileContent}
+`;
+
+    const systemPrompt = mode === "quick" ? quickPrompt : fullPrompt;
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${config.user.geminikey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: systemPrompt }] }],
+          }),
+        }
+      );
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+      clearInterval(loadingInterval);
+
+      if (!text) {
+        s.stop(chalk.red("✗") + " No response from Flarex");
+        console.log();
+        return;
+      }
+
+      s.stop(chalk.green("✓") + " Analysis complete");
+      console.log();
+      console.log(chalk.bold.cyan(fileName));
+      console.log();
+      console.log(chalk.white(text));
+      console.log();
+
+      clack.outro(chalk.green("Done"));
+    } catch (err) {
+      clearInterval(loadingInterval);
+      s.stop(chalk.red("✗") + " Request failed");
+      console.log();
+      clack.log.error(err.message);
+      console.log();
+    }
+  });
+
+
+
+
+// GIT CMDS
+program
+  .command("ship <targetPath> [branch]")
+  .description("Add, commit, and push a project to GitHub")
+  .action(async (targetPath, branch) => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    if (!fs.existsSync(PROJECTS_PATH)) {
+      console.log();
+      clack.log.error("No projects found");
+      console.log();
+      return;
+    }
+
+    const projectsData = JSON.parse(fs.readFileSync(PROJECTS_PATH, "utf8"));
+
+    if (!projectsData.projects || projectsData.projects.length === 0) {
+      console.log();
+      clack.log.error("No projects found");
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Ship"));
+
+    const projectPath = await clack.select({
+      message: "Select a project",
+      options: projectsData.projects.map((p) => ({
+        value: p.path,
+        label: p.name,
+      })),
+    });
+
+    if (!fs.existsSync(projectPath)) {
+      console.log();
+      clack.log.error("Project folder no longer exists");
+      console.log();
+      return;
+    }
+
+    const addPath = targetPath;
+    const targetBranch = branch || "main";
+
+    const s = clack.spinner();
+
+    console.log();
+    s.start("Checking git status");
+    const gitDir = path.join(projectPath, ".git");
+
+    if (!fs.existsSync(gitDir)) {
+      s.stop(chalk.red("✗") + " Git not initialized");
+      console.log();
+      clack.log.error(`Run this first: cd ${projectPath} && git init`);
+      console.log();
+      return;
+    }
+    s.stop(chalk.green("✓") + " Git initialized");
+
+    s.start("Checking remote");
+    let hasRemote = false;
+    try {
+      const remote = await execa("git", ["remote", "get-url", "origin"], {
+        cwd: projectPath,
+      });
+      hasRemote = !!remote.stdout.trim();
+    } catch {
+      hasRemote = false;
+    }
+
+    if (!hasRemote) {
+      s.stop(chalk.red("✗") + " No remote found");
+      console.log();
+      clack.log.error("No remote 'origin' set. Run: git remote add origin <url>");
+      console.log();
+      return;
+    }
+    s.stop(chalk.green("✓") + " Remote found");
+
+    if (addPath !== ".") {
+      const fullTargetPath = path.join(projectPath, addPath);
+      if (!fs.existsSync(fullTargetPath)) {
+        console.log();
+        clack.log.error(`Path not found: ${addPath}`);
+        console.log();
+        return;
+      }
+    }
+
+    s.start("Checking for changes");
+    const statusResult = await execa("git", ["status", "--porcelain", addPath], {
+      cwd: projectPath,
+    });
+
+    if (!statusResult.stdout.trim()) {
+      s.stop(chalk.yellow("○") + " No changes to ship");
+      console.log();
+      clack.outro("Nothing to commit");
+      return;
+    }
+    s.stop(chalk.green("✓") + ` Changes found in ${addPath}`);
+
+    s.start(`Adding ${addPath}`);
+    await execa("git", ["add", addPath], { cwd: projectPath });
+    s.stop(chalk.green("✓") + " Files staged");
+
+    const commitMessage = await clack.text({
+      message: "Commit message",
+      placeholder: "Update code",
+    });
+
+    if (!commitMessage) {
+      clack.cancel("Ship cancelled");
+      return;
+    }
+
+    s.start("Committing");
+    try {
+      await execa("git", ["commit", "-m", commitMessage], { cwd: projectPath });
+      s.stop(chalk.green("✓") + " Committed");
+    } catch (err) {
+      s.stop(chalk.red("✗") + " Commit failed");
+      console.log();
+      clack.log.error(err.message);
+      console.log();
+      return;
+    }
+
+    s.start("Checking branch");
+    const currentBranchResult = await execa("git", ["branch", "--show-current"], {
+      cwd: projectPath,
+    });
+    const currentBranch = currentBranchResult.stdout.trim();
+
+    if (currentBranch !== targetBranch) {
+      const branchListResult = await execa("git", ["branch", "--list", targetBranch], {
+        cwd: projectPath,
+      });
+      const branchExists = !!branchListResult.stdout.trim();
+
+      if (branchExists) {
+        await execa("git", ["checkout", targetBranch], { cwd: projectPath });
+      } else {
+        await execa("git", ["checkout", "-b", targetBranch], { cwd: projectPath });
+      }
+    }
+    s.stop(chalk.green("✓") + ` On branch ${targetBranch}`);
+
+    s.start(`Pushing to ${targetBranch}`);
+    try {
+      await execa("git", ["push", "-u", "origin", targetBranch], { cwd: projectPath });
+      s.stop(chalk.green("✓") + " Pushed");
+    } catch (err) {
+      s.stop(chalk.red("✗") + " Push failed");
+      console.log();
+      clack.log.error(err.message);
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.outro(chalk.green(`Shipped to ${targetBranch}`));
+  });
 // MAIN
 async function main(){
   program.parse();
