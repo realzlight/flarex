@@ -11,14 +11,14 @@ import fs from "fs"
 import { setTimeout as sleep } from "node:timers/promises";
 import gradient from "gradient-string"
 import boxen from "boxen"
-
 const program = new Command();
 
 const FLAREX_DIR = path.join(os.homedir(), "FlarexProjects");
 const CONFIG_PATH = path.join(FLAREX_DIR, "flarexConfig.json");
 const PROJECTS_PATH = path.join(FLAREX_DIR, "flarexProjects.json");
 
-
+// DOCS
+const FLAREX_DOCS = "No Docs Yet, Will be filled later"
 // FUNCTIONS / HELPERS
 async function clearScreen(){
   await execa("clear", { shell: true, stdio: "inherit" });
@@ -184,9 +184,69 @@ async function syncAllProjectsGit() {
   writeProjects(projects);
 }
 
+async function getLatestError() {
+  const home = os.homedir();
+  const platform = process.platform;
 
+  let historyFiles = [];
+
+  if (platform === "win32") {
+    historyFiles = [
+      path.join(home, "AppData/Roaming/Microsoft/Windows/PowerShell/PSReadline/ConsoleHost_history.txt"),
+    ];
+  } else {
+    historyFiles = [
+      path.join(home, ".zsh_history"),
+      path.join(home, ".bash_history"),
+      path.join(home, ".fish_history"),
+    ];
+  }
+
+  for (const file of historyFiles) {
+    if (!fs.existsSync(file)) continue;
+
+    const content = fs.readFileSync(file, "utf8");
+    const lines = content.split("\n");
+
+    // Only check last 50 lines (recent session)
+    const recentLines = lines.slice(Math.max(0, lines.length - 50));
+
+    for (let i = recentLines.length - 1; i >= 0; i--) {
+      const line = recentLines[i];
+
+      // Skip false positives
+      if (
+        line.startsWith("cat") ||
+        line.startsWith("grep") ||
+        line.startsWith("ls") ||
+        line.startsWith("cd") ||
+        line.includes("commit")
+      ) {
+        continue;
+      }
+
+      // Real error patterns
+      if (
+        line.includes("Error:") ||
+        line.includes("at ") ||
+        line.includes("TypeError:") ||
+        line.includes("ReferenceError:") ||
+        line.includes("SyntaxError:") ||
+        (line.includes("✗") && line.length > 10) ||
+        line.includes("ENOENT") ||
+        line.includes("cannot find") ||
+        line.includes("Command failed")
+      ) {
+        return line;
+      }
+    }
+  }
+
+  return null;
+}
 // GIT SCAN
 syncAllProjectsGit()
+getLatestError()
 syncAllProjects()
 // PROGRAMS
 program
@@ -282,8 +342,9 @@ clack.outro(
 console.log();
 console.log(chalk.green.bold("FlarexProjects Folder Created (Dont Delete)"));
 console.log();
-
-await sleep(3000)
+console.log(chalk.dim("RUN flarex init again to change credentials or RUN flarex name <yourname> to change name or RUN flarex gemini <geminikey> to change it!"))
+console.log()
+await sleep(6000)
 banner()
 
 }); // PARENT CLOSING
@@ -1143,6 +1204,256 @@ program
     console.log();
     clack.outro("Flarex is ready");
   });
+
+
+
+
+// AI PART
+
+program
+  .command("error")
+  .description("Auto-detect error or prompt to paste")
+  .action(async () => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+
+    if (!config.user.isgeminikey || !config.user.geminikey) {
+      console.log();
+      clack.log.error("No Gemini API key set. Run: flarex gemini <apikey>");
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Error"));
+
+    const s = clack.spinner();
+
+    s.start("Scanning history");
+    let errorMsg = await getLatestError();
+
+    if (!errorMsg) {
+      s.stop(chalk.yellow("○") + " Nothing found in history");
+
+      errorMsg = await clack.text({
+        message: "Paste your error",
+        placeholder: "Error message...",
+      });
+
+      if (!errorMsg) {
+        clack.cancel("No error provided");
+        return;
+      }
+    } else {
+      s.stop(chalk.green("✓") + " Error found");
+    }
+
+    let currentProject = null;
+    if (fs.existsSync(PROJECTS_PATH)) {
+      const projectsData = JSON.parse(fs.readFileSync(PROJECTS_PATH, "utf8"));
+      currentProject = projectsData.projects.find((p) =>
+        process.cwd().startsWith(p.path)
+      );
+    }
+
+    s.start("Analyzing");
+
+    const systemPrompt = `You are Flarex, a CLI dev assistant running inside a terminal. Sharp, direct, no fluff.
+
+User: ${config.user.name}
+Project: ${currentProject ? `${currentProject.name} (${currentProject.template})` : "None detected"}
+
+IMPORTANT RULES:
+- This is a raw terminal, not a code editor. Never use markdown code fences like \`\`\`javascript. Never use markdown formatting of any kind.
+- Write plain text only. If you show code, write it as plain lines with no backticks or syntax highlighting markers.
+- Keep it short. No greetings, no sign-offs.
+
+Read the error below and respond in exactly this structure:
+
+ERROR
+One line summary of what broke.
+
+SAFE FIX
+Tell the user to check their own code first — the specific line, function, or logic likely responsible. Be specific about what to look for.
+
+HARD FIX
+If the safe fix doesn't apply, give the exact terminal commands to run — reinstalling a package, updating a dependency, deleting node_modules and reinstalling, etc. Only include this if genuinely relevant to the error.
+
+Error:
+${errorMsg}
+`;
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${config.user.geminikey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: systemPrompt }] }],
+          }),
+        }
+      );
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+      if (!text) {
+        s.stop(chalk.red("✗") + " No response");
+        return;
+      }
+
+      s.stop(chalk.green("✓") + " Analyzed");
+      console.log();
+
+      const sections = text.split(/\n(?=ERROR|SAFE FIX|HARD FIX)/);
+      sections.forEach((section) => {
+        const [label, ...rest] = section.split("\n");
+        const body = rest.join("\n").trim();
+        if (!body) return;
+
+        if (label.startsWith("ERROR")) {
+          console.log(chalk.bold.red("ERROR"));
+          console.log(chalk.white(body));
+          console.log();
+        } else if (label.startsWith("SAFE FIX")) {
+          console.log(chalk.bold.cyan("SAFE FIX"));
+          console.log(chalk.white(body));
+          console.log();
+        } else if (label.startsWith("HARD FIX")) {
+          console.log(chalk.bold.magenta("HARD FIX"));
+          console.log(chalk.white(body));
+          console.log();
+        }
+      });
+
+      clack.outro(chalk.green("Done"));
+    } catch (err) {
+      s.stop(chalk.red("✗") + " Request failed");
+      clack.log.error(err.message);
+    }
+  });
+
+program
+  .command("ask <question...>")
+  .description("Ask Flarex anything — setup, troubleshooting, or general questions")
+  .action(async (questionArray) => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+
+    if (!config.user.isgeminikey || !config.user.geminikey) {
+      console.log();
+      clack.log.error("No Gemini API key set. Run: flarex gemini <apikey>");
+      console.log();
+      return;
+    }
+
+    const question = questionArray.join(" ");
+
+    if (!question.trim()) {
+      console.log();
+      clack.log.error("Please provide a question");
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Ask"));
+
+    const s = clack.spinner();
+
+    const loadingStates = [
+      "Flarex is thinking",
+      "Flarex is digging through docs",
+      "Flarex is connecting the dots",
+      "Flarex is almost there",
+    ];
+    let stateIndex = 0;
+
+    s.start(loadingStates[0]);
+    const loadingInterval = setInterval(() => {
+      stateIndex = (stateIndex + 1) % loadingStates.length;
+      s.message(loadingStates[stateIndex]);
+    }, 1200);
+
+    let projectsData = { projects: [] };
+    if (fs.existsSync(PROJECTS_PATH)) {
+      projectsData = JSON.parse(fs.readFileSync(PROJECTS_PATH, "utf8"));
+    }
+
+    const systemPrompt = `You are Flarex, a CLI assistant running inside a developer's terminal. You are NOT Gemini and must never mention Gemini, Google, or any underlying model. You are Flarex — speak as Flarex.
+
+USER CONFIG:
+${JSON.stringify(config, null, 2)}
+
+USER'S PROJECTS:
+${JSON.stringify(projectsData, null, 2)}
+
+FLAREX DOCUMENTATION:
+${FLAREX_DOCS}
+
+RULES:
+- This is a raw terminal, not a code editor. Never use markdown code fences like triple backticks. Never use markdown formatting.
+- Write plain text only.
+- Answer Flarex-related questions first with priority — setup, commands, troubleshooting, config, projects.
+- For general programming questions (what is JavaScript, how async works, etc), answer briefly and clearly.
+- Keep answers short and direct. No greetings, no sign-offs, no fluff.
+- If asked who you are or what model you use, say you are Flarex, nothing else.
+
+Question:
+${question}
+`;
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${config.user.geminikey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: systemPrompt }] }],
+          }),
+        }
+      );
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+      clearInterval(loadingInterval);
+
+      if (!text) {
+        s.stop(chalk.red("✗") + " No response");
+        console.log();
+        return;
+      }
+
+      s.stop(chalk.green("✓") + " Flarex answered");
+      console.log();
+      console.log(boxen(chalk.white(text)))
+      console.log();
+
+      clack.outro(chalk.green("Done"));
+    } catch (err) {
+      clearInterval(loadingInterval);
+      s.stop(chalk.red("✗") + " Request failed");
+      console.log();
+      clack.log.error(err.message);
+      console.log();
+    }
+  });
+
 
 // MAIN
 async function main(){
