@@ -20,7 +20,149 @@ const LOGS_PATH = path.join(FLAREX_DIR, "flarexLog.json");
 
 
 // DOCS
-const FLAREX_DOCS = "No Docs Yet, Will be filled later"
+const FLAREX_DOCS = `# Flarex
+
+A CLI for developers building on any os. Scaffold projects, ship code, track issues, and get AI-powered fixes — all from your terminal.
+
+Built for developers who want less setup, fast shipping.
+
+---
+
+## Install
+
+```bash
+npm install -g flarex
+```
+
+## Getting Started
+
+Run the setup wizard first:
+
+```bash
+flarex init
+```
+
+This creates `~/FlarexProjects/` with your config and project registry, and asks you to set a name, theme, and optional Gemini API key.
+
+---
+
+## Commands
+
+### Setup & Config
+
+| Command | Description |
+|---|---|
+| `flarex init` | First-time setup. Creates config, workspace, and project registry. |
+| `flarex name <name>` | Update your display name. |
+| `flarex theme` | Change your terminal theme. |
+| `flarex gemini <apikey>` | Set or update your Gemini API key (needed for AI commands). |
+| `flarex recover` | Restore missing config/project files if deleted accidentally. |
+
+---
+
+### Project Management
+
+| Command | Description |
+|---|---|
+| `flarex create` | Scaffold a new project. Choose MERN, Express, or React + Vite. Installs dependencies automatically. |
+| `flarex add <folder>` | Import an existing project from your home directory into Flarex. |
+| `flarex remove <project>` | Move a project back to home and remove it from Flarex tracking. |
+| `flarex switch [project]` | Drop into a project's directory. No argument shows a picker. |
+| `flarex list` | Quick view of all projects — name, template, git status, active/inactive. |
+| `flarex sync` | Rescan all projects, update git status, detect templates, remove dead entries. |
+
+**Templates:**
+- **MERN** — Express server (`server/`) + Vite/React client (`client/`), both with dependencies installed
+- **Express** — Standalone Express API in the project root
+- **React** — Standalone Vite + React app in the project root, pre-wired with `axios` and `react-router-dom`
+
+---
+
+### Shipping Code
+
+| Command | Description |
+|---|---|
+| `flarex ship <path> [branch]` | Add, commit, and push. `path` is required (`.` for everything, or a specific file/folder). `branch` defaults to `main`. |
+
+Checks git is initialized and a remote exists before doing anything. If you leave the commit message empty, Flarex reads your staged diff and generates a commit message for you — you can accept it or write your own.
+
+```bash
+flarex ship .                  # commit everything, push to main
+flarex ship server             # commit server/ only
+flarex ship . dev              # commit everything, push to dev
+flarex ship business.tsx dev   # commit one file, push to dev
+```
+
+---
+
+### AI Commands
+
+Require a Gemini API key set via `flarex gemini <apikey>`.
+
+| Command | Description |
+|---|---|
+| `flarex error` | Scans recent terminal history for an error. If nothing found, prompts you to paste one. Returns a structured breakdown: error summary, safe fix (check your own code), hard fix (reinstall/update/delete dependencies). |
+| `flarex ask <question>` | Ask Flarex anything — how to use a command, troubleshooting, or general dev questions. |
+| `flarex fix` | Pick a project, browse into its folders, select a file. Choose a quick syntax/bracket/indentation scan or a full logic review. Large files (50KB+) prompt before reading the first 3000 lines only, to keep things fast. |
+
+---
+
+### Project Tracking
+
+Every project can track its own development status, version, and issue list — no separate "product" concept, it's all part of the project.
+
+| Command | Description |
+|---|---|
+| `flarex info <project>` | Full project overview — path, template, git, dev status, version, and issue breakdown. |
+| `flarex devstatus <project> <status>` | Set development stage. |
+| `flarex version-set <project> <version>` | Set the project's version string (e.g. `1.0.0`). |
+| `flarex issue-add` | Pick a project, add an issue. Prompts "add another?" so you can batch-add quickly. |
+| `flarex issue-close` | Pick a project, pick from its open issues, close it. |
+| `flarex issue-open` | Pick a project, pick from its closed issues, reopen it. |
+| `flarex issue-list <project>` | List all issues for a project with open/closed counts. |
+
+**Valid dev statuses:**
+```
+pre-alpha  ·  alpha  ·  in-development  ·  beta  ·  bug-testing  ·  shipped
+```
+
+---
+
+### Dev Log
+
+| Command | Description |
+|---|---|
+| `flarex log` | Log what you shipped today — pick a project, describe what you did, hours (optional), and status. |
+| `flarex log --week` | Summary of the last 7 days — total entries, hours, status breakdown, per-project counts, timeline. |
+| `flarex log --month` | Same summary, last 30 days. |
+| `flarex log --week --project <name>` | Filter either summary to one project. |
+
+---
+
+## Config Files
+
+Everything lives in `~/FlarexProjects/`:
+
+| File | Purpose |
+|---|---|
+| `flarexConfig.json` | Your name, theme, Gemini key, init status. |
+| `flarexProjects.json` | Every tracked project — path, template, git info, dev status, version, issues. |
+| `flarexLog.json` | Daily dev log entries. |
+
+If any of these go missing, run `flarex recover`.
+
+---
+
+## Requirements
+
+- Node.js
+- Git (for `ship`, `sync`, and git status detection)
+- A Gemini API key for AI commands (free tier available)
+
+---
+
+Made with care, one terminal session at a time.
+`
 // FUNCTIONS / HELPERS
 async function clearScreen(){
   await execa("clear", { shell: true, stdio: "inherit" });
@@ -2600,6 +2742,275 @@ program
     clack.outro(chalk.green("End of report"));
   });
 
+program
+  .command("commands")
+  .alias("help-all")
+  .description("Show all Flarex commands and how to use them")
+  .action(() => {
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Commands"));
+
+    const sections = [
+      {
+        title: "Setup & Config",
+        commands: [
+          ["flarex init", "First-time setup — creates config and workspace"],
+          ["flarex name <name>", "Update your display name"],
+          ["flarex theme", "Change your terminal theme"],
+          ["flarex gemini <apikey>", "Set your Gemini API key"],
+          ["flarex recover", "Restore missing config/project files"],
+        ],
+      },
+      {
+        title: "Project Management",
+        commands: [
+          ["flarex create", "Scaffold a new project (MERN / Express / React)"],
+          ["flarex add <folder>", "Import an existing project from home"],
+          ["flarex remove <project>", "Move project back to home, untrack it"],
+          ["flarex switch [project]", "Jump into a project's directory"],
+          ["flarex list", "Quick view of all tracked projects"],
+          ["flarex sync", "Rescan projects, update git status, clean dead entries"],
+        ],
+      },
+      {
+        title: "Shipping",
+        commands: [
+          ["flarex ship <path> [branch]", "Add, commit, push. '.' = everything. Branch defaults to main"],
+        ],
+      },
+      {
+        title: "AI Commands",
+        commands: [
+          ["flarex error", "Find and explain a recent error, or paste one"],
+          ["flarex ask <question>", "Ask Flarex anything — usage or general dev help"],
+          ["flarex fix", "Browse a project's files, get a syntax scan or full review"],
+        ],
+      },
+      {
+        title: "Project Tracking",
+        commands: [
+          ["flarex info <project>", "Full project overview — status, version, issues"],
+          ["flarex devstatus <project> <status>", "Set dev stage (alpha, beta, shipped, etc)"],
+          ["flarex version-set <project> <version>", "Set project version"],
+          ["flarex issue-add", "Add issues to a project (loop to add more)"],
+          ["flarex issue-close", "Close an open issue"],
+          ["flarex issue-open", "Reopen a closed issue"],
+          ["flarex issue-list <project>", "List all issues for a project"],
+        ],
+      },
+      {
+        title: "Dev Log",
+        commands: [
+          ["flarex log", "Log what you shipped today"],
+          ["flarex log --week", "Summary of the last 7 days"],
+          ["flarex log --month", "Summary of the last 30 days"],
+          ["flarex log --week --project <name>", "Filter summary by project"],
+        ],
+      },
+    ];
+
+    sections.forEach((section) => {
+      console.log();
+      clack.log.step(chalk.bold(section.title));
+      console.log();
+      section.commands.forEach(([cmd, desc]) => {
+        console.log(chalk.hex("#f97316")(`  ${cmd}`));
+        console.log(chalk.dim(`    ${desc}`));
+      });
+    });
+
+    console.log();
+    console.log(chalk.dim("Need setup? Run: ") + chalk.white("flarex init"));
+    console.log(chalk.dim("Stuck? Run: ") + chalk.white("flarex ask <your question>"));
+
+    console.log();
+    clack.outro(chalk.green(`${sections.reduce((sum, s) => sum + s.commands.length, 0)} commands available`));
+  });
+
+
+program
+  .command("tutorial")
+  .description("A friendly walkthrough of Flarex, from install to shipping")
+  .action(async () => {
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Welcome to Flarex"));
+
+    const screens = [
+      {
+        title: "What is Flarex?",
+        lines: [
+          "Flarex is a CLI built for developers coding on mobile — Termux, no desktop needed.",
+          "It scaffolds projects, ships code to GitHub, tracks issues, and even fixes your errors using AI.",
+          "Think of it as your dev toolkit that lives entirely in the terminal.",
+        ],
+      },
+      {
+        title: "Getting Started",
+        lines: [
+          "Install it globally:",
+          "  npm install -g flarex",
+          "",
+          "Then run the setup wizard. This only happens once:",
+          "  flarex init",
+          "",
+          "It'll ask for your name, a theme, and optionally a Gemini API key (needed later for AI commands).",
+          "This creates a folder at ~/FlarexProjects — this is where all your projects and Flarex's data live.",
+        ],
+      },
+      {
+        title: "Creating Your First Project",
+        lines: [
+          "Run:",
+          "  flarex create",
+          "",
+          "You'll pick a name and a template — MERN, Express, or React + Vite.",
+          "Flarex scaffolds the whole thing, installs dependencies, and sets you up with clean boilerplate.",
+          "No more copy-pasting starter templates by hand.",
+        ],
+      },
+      {
+        title: "Managing Your Projects",
+        lines: [
+          "  flarex list          — quick view of every project you're tracking",
+          "  flarex switch         — jump straight into a project's folder",
+          "  flarex add <folder>   — bring an existing project (from your home dir) into Flarex",
+          "  flarex remove <name>  — move a project back to home and stop tracking it",
+          "  flarex sync           — rescan everything, update git status, clean up dead entries",
+          "",
+          "Everything Flarex knows about your projects lives in flarexProjects.json — you never have to touch it directly.",
+        ],
+      },
+      {
+        title: "Shipping Code",
+        lines: [
+          "When you're ready to push changes:",
+          "  flarex ship .",
+          "",
+          "That adds everything, commits, and pushes to main.",
+          "Want to push only one file or folder? Just name it:",
+          "  flarex ship server",
+          "  flarex ship business.tsx dev",
+          "",
+          "Leave the commit message blank when asked, and Flarex will read your changes and write one for you.",
+        ],
+      },
+      {
+        title: "AI Commands",
+        lines: [
+          "These need a Gemini API key — set one anytime with:",
+          "  flarex gemini <your-api-key>",
+          "",
+          "  flarex error   — finds your latest error (or you paste one), explains it, and gives you a fix",
+          "  flarex ask     — ask Flarex literally anything, dev questions or how-to-use-Flarex questions",
+          "  flarex fix     — pick a project and file, get a quick syntax scan or a full code review",
+          "",
+          "These are built to feel like a senior dev looking over your shoulder — direct, no fluff.",
+        ],
+      },
+      {
+        title: "Tracking Your Progress",
+        lines: [
+          "Every project can track its own status, version, and issues:",
+          "  flarex info <project>              — full overview of a project",
+          "  flarex devstatus <project> <stage>  — alpha, beta, shipped, etc",
+          "  flarex version-set <project> <ver>  — set a version like 1.0.0",
+          "  flarex issue-add                    — add issues to work on",
+          "  flarex issue-close / issue-open      — manage issue status",
+          "  flarex issue-list <project>         — see everything open and closed",
+          "",
+          "And to log what you actually shipped each day:",
+          "  flarex log",
+          "  flarex log --week   — see your last 7 days summarized",
+        ],
+      },
+      {
+        title: "Where To Go From Here",
+        lines: [
+          "  flarex commands   — full list of every command, anytime you forget one",
+          "  flarex ask        — stuck on anything? just ask",
+          "",
+          "That's genuinely everything you need to go from zero to shipped.",
+          "Now go build something.",
+        ],
+      },
+    ];
+
+    for (let i = 0; i < screens.length; i++) {
+      const screen = screens[i];
+      console.log();
+      clack.log.step(chalk.bold.hex("#f97316")(`${screen.title}`));
+      console.log();
+      screen.lines.forEach((line) => {
+        if (line.trim().startsWith("flarex") || line.trim().startsWith("npm")) {
+          console.log(chalk.cyan(`  ${line.trim()}`));
+        } else if (line === "") {
+          console.log();
+        } else {
+          console.log(chalk.white(`  ${line}`));
+        }
+      });
+
+      if (i < screens.length - 1) {
+        console.log();
+        const cont = await clack.confirm({
+          message: "Continue?",
+          initialValue: true,
+        });
+
+        if (!cont) {
+          console.log();
+          clack.outro(chalk.yellow("Tutorial paused — run 'flarex tutorial' anytime to resume from the start"));
+          return;
+        }
+      }
+    }
+
+    console.log();
+    clack.outro(chalk.green("You're ready. Happy shipping."));
+  });
+
+
+program
+  .command("docs")
+  .description("Show the full Flarex documentation")
+  .action(() => {
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Documentation"));
+    console.log();
+
+    const lines = FLAREX_DOCS.split("\n");
+
+    lines.forEach((line) => {
+      if (line.startsWith("# ")) {
+        console.log(chalk.bold.hex("#f97316")(line.replace("# ", "")));
+        console.log(chalk.dim("─".repeat(line.length + 10)));
+      } else if (line.startsWith("## ")) {
+        console.log();
+        console.log(chalk.bold.cyan(line.replace("## ", "▸ ")));
+      } else if (line.startsWith("### ")) {
+        console.log();
+        console.log(chalk.bold.white(line.replace("### ", "")));
+      } else if (line.startsWith("- ") || line.startsWith("* ")) {
+        console.log(chalk.gray("  • ") + chalk.white(line.replace(/^[-*]\s/, "")));
+      } else if (line.match(/^\|.*\|$/)) {
+        // Table row
+        const cells = line.split("|").filter((c) => c.trim() !== "");
+        if (cells.every((c) => c.trim().match(/^-+$/))) return; // skip separator row
+        console.log(cells.map((c) => chalk.white(c.trim())).join(chalk.dim("  │  ")));
+      } else if (line.trim().startsWith("`flarex") || line.trim().startsWith("flarex ")) {
+        console.log(chalk.cyan(`  ${line.trim()}`));
+      } else if (line.trim() === "---") {
+        console.log(chalk.dim("─".repeat(50)));
+      } else if (line.trim() === "") {
+        console.log();
+      } else {
+        console.log(chalk.gray(line));
+      }
+    });
+
+    console.log();
+    clack.outro(chalk.green("End of docs"));
+  });
 
 
 // MAIN
