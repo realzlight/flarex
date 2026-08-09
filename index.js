@@ -598,12 +598,12 @@ projects.projects.push({
   name: projectname,
   safeName: safeName,
   path: FullPath,
-  template:template,
+  template: template,
   status: "active",
-  git: {
-    initialized: false,
-    remote: null,
-  },
+  git: { initialized: false, remote: null },
+  devStatus: "in-development",
+  version: "0.1.0",
+  issues: [],
 });
 
 writeProjects(projects);
@@ -706,14 +706,13 @@ projects.projects.push({
   name: projectname,
   safeName: safeName,
   path: FullPath,
-  template:template,
+  template: template,
   status: "active",
-  git: {
-    initialized: false,
-    remote: null,
-  },
+  git: { initialized: false, remote: null },
+  devStatus: "in-development",
+  version: "0.1.0",
+  issues: [],
 });
-
 writeProjects(projects);
     } // EXORESS 
 
@@ -827,12 +826,12 @@ projects.projects.push({
   name: projectname,
   safeName: safeName,
   path: FullPath,
-  template:template,
+  template: template,
   status: "active",
-  git: {
-    initialized: false,
-    remote: null,
-  },
+  git: { initialized: false, remote: null },
+  devStatus: "in-development",
+  version: "0.1.0",
+  issues: [],
 });
 
 writeProjects(projects);
@@ -1030,17 +1029,17 @@ program
     console.log();
     s.start("Registering project");
     const projects = readProjects();
-    projects.projects.push({
-      name: folderName,
-      safeName: safeName,
-      path: destPath,
-      template: template,
-      status: "active",
-      git: {
-        initialized: gitInitialized,
-        remote: gitRemote,
-      },
-    });
+projects.projects.push({
+  name: projectname,
+  safeName: safeName,
+  path: FullPath,
+  template: template,
+  status: "active",
+  git: { initialized: false, remote: null },
+  devStatus: "in-development",
+  version: "0.1.0",
+  issues: [],
+});
     writeProjects(projects);
     s.stop(chalk.green("✓") + " Project registered");
 
@@ -1977,11 +1976,15 @@ ${diff}
   });
 
 
-// UTIL CMD
+// LOG CMDS
+
 program
   .command("log")
-  .description("Log what you shipped today")
-  .action(async () => {
+  .description("Log what you shipped today, or view week/month summaries")
+  .option("-w, --week", "Show this week's summary")
+  .option("-m, --month", "Show this month's summary")
+  .option("-p, --project <name>", "Filter summary by project")
+  .action(async (options) => {
     if (!isInit()) {
       console.log();
       clack.log.error("Flarex not initialized. Run: flarex init");
@@ -1989,6 +1992,113 @@ program
       return;
     }
 
+    // ---------------- SUMMARY MODE ----------------
+    if (options.week || options.month) {
+      const logsData = readLogs();
+
+      if (!logsData.logs || logsData.logs.length === 0) {
+        console.log();
+        clack.log.warn("No logs found yet");
+        console.log();
+        return;
+      }
+
+      const now = new Date();
+      let rangeStart;
+      let rangeLabel;
+
+      if (options.week) {
+        rangeStart = new Date(now);
+        rangeStart.setDate(now.getDate() - 7);
+        rangeLabel = "This Week";
+      } else {
+        rangeStart = new Date(now);
+        rangeStart.setDate(now.getDate() - 30);
+        rangeLabel = "This Month";
+      }
+
+      let filtered = logsData.logs.filter(
+        (l) => new Date(l.timestamp) >= rangeStart
+      );
+
+      if (options.project) {
+        filtered = filtered.filter(
+          (l) => l.project.toLowerCase() === options.project.toLowerCase()
+        );
+      }
+
+      console.log();
+      clack.intro(chalk.bold.hex("#f97316")(`Flarex Log — ${rangeLabel}`));
+
+      if (filtered.length === 0) {
+        console.log();
+        clack.log.warn("No entries in this range");
+        console.log();
+        return;
+      }
+
+      // Stats
+      const totalHours = filtered.reduce((sum, l) => sum + (l.hours || 0), 0);
+      const completed = filtered.filter((l) => l.status === "completed").length;
+      const inProgress = filtered.filter((l) => l.status === "in-progress").length;
+      const blocked = filtered.filter((l) => l.status === "blocked").length;
+
+      const projectCounts = {};
+      filtered.forEach((l) => {
+        projectCounts[l.project] = (projectCounts[l.project] || 0) + 1;
+      });
+
+      console.log();
+      clack.log.step(chalk.bold("Overview"));
+      console.log(chalk.white(`  Entries: ${filtered.length}`));
+      console.log(chalk.white(`  Hours: ${totalHours}h`));
+      console.log(
+        chalk.green(`  Completed: ${completed}`) +
+          chalk.dim("  ") +
+          chalk.yellow(`In Progress: ${inProgress}`) +
+          chalk.dim("  ") +
+          chalk.red(`Blocked: ${blocked}`)
+      );
+
+      console.log();
+      clack.log.step(chalk.bold("By Project"));
+      Object.entries(projectCounts)
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([proj, count]) => {
+          console.log(chalk.white(`  ${proj}`) + chalk.dim(` — ${count} entries`));
+        });
+
+      console.log();
+      clack.log.step(chalk.bold("Timeline"));
+      console.log();
+
+      const sorted = [...filtered].sort(
+        (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+      );
+
+      sorted.forEach((entry) => {
+        const statusColor =
+          entry.status === "completed"
+            ? chalk.green
+            : entry.status === "blocked"
+            ? chalk.red
+            : chalk.yellow;
+
+        console.log(
+          chalk.dim(`  ${entry.date}`) +
+            chalk.bold(`  ${entry.project}`) +
+            statusColor(`  [${entry.status}]`)
+        );
+        console.log(chalk.dim(`    ${entry.what}`));
+        if (entry.hours) console.log(chalk.dim(`    ${entry.hours}h`));
+        console.log();
+      });
+
+      clack.outro(chalk.green(`${filtered.length} entries in ${rangeLabel.toLowerCase()}`));
+      return;
+    }
+
+    // ---------------- ADD LOG MODE ----------------
     if (!fs.existsSync(PROJECTS_PATH)) {
       console.log();
       clack.log.error("No projects found");
@@ -2067,7 +2177,6 @@ program
 
     s.stop(chalk.green("✓") + " Log saved");
 
-    // Show today's entries
     const today = now.toISOString().split("T")[0];
     const todayLogs = logsData.logs.filter((l) => l.date === today);
 
@@ -2094,6 +2203,403 @@ program
 
     clack.outro(chalk.green("Keep shipping"));
   });
+
+
+
+// ---------------- ISSUE ADD ----------------
+program
+  .command("issue-add")
+  .description("Add issues to a project")
+  .action(async () => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    const projectsData = readProjects();
+
+    if (!projectsData.projects || projectsData.projects.length === 0) {
+      console.log();
+      clack.log.error("No projects found");
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Issue"));
+
+    const safeName = await clack.select({
+      message: "Select a project",
+      options: projectsData.projects.map((p) => ({
+        value: p.safeName,
+        label: p.name,
+      })),
+    });
+
+    const project = projectsData.projects.find((p) => p.safeName === safeName);
+
+    if (!project.issues) project.issues = [];
+
+    let addMore = true;
+
+    while (addMore) {
+      const title = await clack.text({
+        message: "Issue title",
+        placeholder: "Add weather API integration...",
+        validate: (v) => !v && "Title is required",
+      });
+
+      if (!title) break;
+
+      const nextId =
+        project.issues.length > 0
+          ? Math.max(...project.issues.map((i) => i.id)) + 1
+          : 1;
+
+      project.issues.push({
+        id: nextId,
+        title: title,
+        status: "todo",
+        createdAt: new Date().toISOString(),
+      });
+
+      console.log(chalk.green("✓") + ` Issue #${nextId} added`);
+
+      addMore = await clack.confirm({
+        message: "Add another issue?",
+      });
+    }
+
+    writeProjects(projectsData);
+
+    console.log();
+    clack.outro(chalk.green(`Issues saved for ${project.name}`));
+  });
+
+// ---------------- ISSUE CLOSE ----------------
+program
+  .command("issue-close")
+  .description("Close an open issue")
+  .action(async () => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    const projectsData = readProjects();
+
+    if (!projectsData.projects || projectsData.projects.length === 0) {
+      console.log();
+      clack.log.error("No projects found");
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Issue Close"));
+
+    const safeName = await clack.select({
+      message: "Select a project",
+      options: projectsData.projects.map((p) => ({
+        value: p.safeName,
+        label: p.name,
+      })),
+    });
+
+    const project = projectsData.projects.find((p) => p.safeName === safeName);
+    const openIssues = (project.issues || []).filter((i) => i.status === "todo");
+
+    if (openIssues.length === 0) {
+      console.log();
+      clack.log.warn("No open issues");
+      console.log();
+      return;
+    }
+
+    const issueId = await clack.select({
+      message: "Select an issue to close",
+      options: openIssues.map((i) => ({
+        value: i.id,
+        label: `#${i.id} — ${i.title}`,
+      })),
+    });
+
+    const issue = project.issues.find((i) => i.id === issueId);
+    issue.status = "done";
+    issue.closedAt = new Date().toISOString();
+
+    writeProjects(projectsData);
+
+    console.log();
+    clack.outro(chalk.green(`Issue #${issueId} closed`));
+  });
+
+// ---------------- ISSUE OPEN ----------------
+program
+  .command("issue-open")
+  .description("Reopen a closed issue")
+  .action(async () => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    const projectsData = readProjects();
+
+    if (!projectsData.projects || projectsData.projects.length === 0) {
+      console.log();
+      clack.log.error("No projects found");
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Issue Open"));
+
+    const safeName = await clack.select({
+      message: "Select a project",
+      options: projectsData.projects.map((p) => ({
+        value: p.safeName,
+        label: p.name,
+      })),
+    });
+
+    const project = projectsData.projects.find((p) => p.safeName === safeName);
+    const closedIssues = (project.issues || []).filter((i) => i.status === "done");
+
+    if (closedIssues.length === 0) {
+      console.log();
+      clack.log.warn("No closed issues");
+      console.log();
+      return;
+    }
+
+    const issueId = await clack.select({
+      message: "Select an issue to reopen",
+      options: closedIssues.map((i) => ({
+        value: i.id,
+        label: `#${i.id} — ${i.title}`,
+      })),
+    });
+
+    const issue = project.issues.find((i) => i.id === issueId);
+    issue.status = "todo";
+    delete issue.closedAt;
+
+    writeProjects(projectsData);
+
+    console.log();
+    clack.outro(chalk.green(`Issue #${issueId} reopened`));
+  });
+
+// ---------------- ISSUE LIST ----------------
+program
+  .command("issue-list <projectName>")
+  .description("List all issues for a project")
+  .action(async (projectName) => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    const projectsData = readProjects();
+    const project = projectsData.projects.find(
+      (p) => p.safeName === projectName.toLowerCase()
+    );
+
+    if (!project) {
+      console.log();
+      clack.log.error(`Project "${projectName}" not found`);
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")(`Issues — ${project.name}`));
+
+    const issues = project.issues || [];
+
+    if (issues.length === 0) {
+      console.log();
+      clack.log.warn("No issues yet");
+      console.log();
+      return;
+    }
+
+    console.log();
+    issues.forEach((issue) => {
+      const statusColor = issue.status === "done" ? chalk.green : chalk.yellow;
+      const statusLabel = issue.status === "done" ? "✓ done" : "○ todo";
+
+      console.log(
+        chalk.bold(`#${issue.id}`) + `  ${issue.title}  ` + statusColor(statusLabel)
+      );
+    });
+
+    const openCount = issues.filter((i) => i.status === "todo").length;
+    const closedCount = issues.filter((i) => i.status === "done").length;
+
+    console.log();
+    clack.outro(`${openCount} open · ${closedCount} closed`);
+  });
+
+// ---------------- DEV STATUS ----------------
+program
+  .command("devstatus <projectName> <status>")
+  .description("Set project development status")
+  .action(async (projectName, status) => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    const validStatuses = [
+      "pre-alpha",
+      "alpha",
+      "in-development",
+      "beta",
+      "bug-testing",
+      "shipped",
+    ];
+
+    if (!validStatuses.includes(status.toLowerCase())) {
+      console.log();
+      clack.log.error(`Invalid status. Use: ${validStatuses.join(", ")}`);
+      console.log();
+      return;
+    }
+
+    const projectsData = readProjects();
+    const project = projectsData.projects.find(
+      (p) => p.safeName === projectName.toLowerCase()
+    );
+
+    if (!project) {
+      console.log();
+      clack.log.error(`Project "${projectName}" not found`);
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Dev Status"));
+
+    const s = clack.spinner();
+    s.start("Updating status");
+    project.devStatus = status.toLowerCase();
+    writeProjects(projectsData);
+    s.stop(chalk.green("✓") + ` Status set to ${status}`);
+
+    console.log();
+    clack.outro(chalk.green(`${project.name} is now ${status}`));
+  });
+
+// ---------------- VERSION ----------------
+program
+  .command("version-set <projectName> <version>")
+  .description("Set project version")
+  .action(async (projectName, version) => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    const projectsData = readProjects();
+    const project = projectsData.projects.find(
+      (p) => p.safeName === projectName.toLowerCase()
+    );
+
+    if (!project) {
+      console.log();
+      clack.log.error(`Project "${projectName}" not found`);
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")("Flarex Version"));
+
+    const s = clack.spinner();
+    s.start("Updating version");
+    project.version = version;
+    writeProjects(projectsData);
+    s.stop(chalk.green("✓") + ` Version set to ${version}`);
+
+    console.log();
+    clack.outro(chalk.green(`${project.name} is now v${version}`));
+  });
+
+// ---------------- INFO ----------------
+program
+  .command("info <projectName>")
+  .description("Show full details for a project")
+  .action(async (projectName) => {
+    if (!isInit()) {
+      console.log();
+      clack.log.error("Flarex not initialized. Run: flarex init");
+      console.log();
+      return;
+    }
+
+    const projectsData = readProjects();
+    const project = projectsData.projects.find(
+      (p) => p.safeName === projectName.toLowerCase()
+    );
+
+    if (!project) {
+      console.log();
+      clack.log.error(`Project "${projectName}" not found`);
+      console.log();
+      return;
+    }
+
+    console.log();
+    clack.intro(chalk.bold.hex("#f97316")(project.name));
+
+    const issues = project.issues || [];
+    const openCount = issues.filter((i) => i.status === "todo").length;
+    const closedCount = issues.filter((i) => i.status === "done").length;
+
+    const gitStatus = project.git?.initialized ? chalk.green("✓ Git") : chalk.gray("○ No Git");
+    const gitRemote = project.git?.remote ? chalk.dim(project.git.remote) : chalk.dim("No remote");
+
+    console.log();
+    console.log(chalk.dim("Path       ") + chalk.white(project.path));
+    console.log(chalk.dim("Template   ") + chalk.white(project.template || "Unknown"));
+    console.log(chalk.dim("Status     ") + (project.status === "active" ? chalk.green("● Active") : chalk.gray("○ Inactive")));
+    console.log(chalk.dim("Dev Status ") + chalk.hex("#f97316")(project.devStatus || "Not set"));
+    console.log(chalk.dim("Version    ") + chalk.white(project.version || "0.0.0"));
+    console.log(chalk.dim("Git        ") + gitStatus + "  " + gitRemote);
+
+    console.log();
+    console.log(chalk.bold(`Issues (${openCount} open · ${closedCount} closed)`));
+
+    if (issues.length === 0) {
+      console.log(chalk.dim("  No issues yet"));
+    } else {
+      issues.forEach((issue) => {
+        const statusColor = issue.status === "done" ? chalk.green : chalk.yellow;
+        const statusLabel = issue.status === "done" ? "✓" : "○";
+        console.log(`  ${statusColor(statusLabel)} #${issue.id} ${issue.title}`);
+      });
+    }
+
+    console.log();
+    clack.outro(chalk.green("End of report"));
+  });
+
 
 
 // MAIN
