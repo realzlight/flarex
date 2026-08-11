@@ -20,149 +20,97 @@ const LOGS_PATH = path.join(FLAREX_DIR, "flarexLog.json");
 
 
 // DOCS
-const FLAREX_DOCS = `# Flarex
+const FLAREX_DOCS = `
+FLAREX DOCUMENTATION
 
-A CLI for developers building on any os. Scaffold projects, ship code, track issues, and get AI-powered fixes — all from your terminal.
+INSTALL
+  npm install -g flarex
 
-Built for developers who want less setup, fast shipping.
+GETTING STARTED
+  Run the setup wizard first:
+  flarex init
 
----
+  This creates ~/FlarexProjects/ with your config and project registry,
+  and asks you to set a name, theme, and optional Gemini API key.
 
-## Install
+COMMANDS
 
-```bash
-npm install -g flarex
-```
+Setup & Config
+  flarex init                    First-time setup. Creates config, workspace, and project registry.
+  flarex name <name>             Update your display name.
+  flarex theme                   Change your terminal theme.
+  flarex gemini <apikey>         Set or update your Gemini API key (needed for AI commands).
+  flarex recover                 Restore missing config/project files if deleted accidentally.
 
-## Getting Started
+Project Management
+  flarex create                  Scaffold a new project. Choose MERN, Express, or React + Vite. Installs dependencies automatically.
+  flarex add <folder>            Import an existing project from your home directory into Flarex.
+  flarex remove <project>        Move a project back to home and remove it from Flarex tracking.
+  flarex switch [project]        Drop into a project's directory. No argument shows a picker.
+  flarex list                    Quick view of all projects — name, template, git status, active/inactive.
+  flarex sync                    Rescan all projects, update git status, detect templates, remove dead entries.
 
-Run the setup wizard first:
+  Templates:
+    MERN     — Express server (server/) + Vite/React client (client/), both with dependencies installed
+    Express  — Standalone Express API in the project root
+    React    — Standalone Vite + React app in the project root, pre-wired with axios and react-router-dom
 
-```bash
-flarex init
-```
+Shipping Code
+  flarex ship <path> [branch]    Add, commit, and push. path is required (. for everything, or a specific file/folder). branch defaults to main.
 
-This creates `~/FlarexProjects/` with your config and project registry, and asks you to set a name, theme, and optional Gemini API key.
+  Checks git is initialized and a remote exists before doing anything.
+  If you leave the commit message empty, Flarex reads your staged diff
+  and generates a commit message for you — you can accept it or write your own.
 
----
+  Examples:
+    flarex ship .                  commit everything, push to main
+    flarex ship server             commit server/ only
+    flarex ship . dev              commit everything, push to dev
+    flarex ship business.tsx dev   commit one file, push to dev
 
-## Commands
+AI Commands
+  Require a Gemini API key set via flarex gemini <apikey>.
 
-### Setup & Config
+  flarex error                   Scans recent terminal history for an error. If nothing found, prompts you to paste one. Returns a structured breakdown: error summary, safe fix (check your own code), hard fix (reinstall/update/delete dependencies).
+  flarex ask <question>          Ask Flarex anything — how to use a command, troubleshooting, or general dev questions.
+  flarex fix                     Pick a project, browse into its folders, select a file. Choose a quick syntax/bracket/indentation scan or a full logic review. Large files (50KB+) prompt before reading the first 3000 lines only, to keep things fast.
 
-| Command | Description |
-|---|---|
-| `flarex init` | First-time setup. Creates config, workspace, and project registry. |
-| `flarex name <name>` | Update your display name. |
-| `flarex theme` | Change your terminal theme. |
-| `flarex gemini <apikey>` | Set or update your Gemini API key (needed for AI commands). |
-| `flarex recover` | Restore missing config/project files if deleted accidentally. |
+Project Tracking
+  Every project can track its own development status, version, and issue list — no separate "product" concept, it's all part of the project.
 
----
+  flarex info <project>                  Full project overview — path, template, git, dev status, version, and issue breakdown.
+  flarex devstatus <project> <status>    Set development stage.
+  flarex version-set <project> <version> Set the project's version string (e.g. 1.0.0).
+  flarex issue-add                       Pick a project, add an issue. Prompts "add another?" so you can batch-add quickly.
+  flarex issue-close                     Pick a project, pick from its open issues, close it.
+  flarex issue-open                      Pick a project, pick from its closed issues, reopen it.
+  flarex issue-list <project>            List all issues for a project with open/closed counts.
 
-### Project Management
+  Valid dev statuses:
+    pre-alpha, alpha, in-development, beta, bug-testing, shipped
 
-| Command | Description |
-|---|---|
-| `flarex create` | Scaffold a new project. Choose MERN, Express, or React + Vite. Installs dependencies automatically. |
-| `flarex add <folder>` | Import an existing project from your home directory into Flarex. |
-| `flarex remove <project>` | Move a project back to home and remove it from Flarex tracking. |
-| `flarex switch [project]` | Drop into a project's directory. No argument shows a picker. |
-| `flarex list` | Quick view of all projects — name, template, git status, active/inactive. |
-| `flarex sync` | Rescan all projects, update git status, detect templates, remove dead entries. |
+Dev Log
+  flarex log                             Log what you shipped today — pick a project, describe what you did, hours (optional), and status.
+  flarex log --week                      Summary of the last 7 days — total entries, hours, status breakdown, per-project counts, timeline.
+  flarex log --month                     Same summary, last 30 days.
+  flarex log --week --project <name>     Filter either summary to one project.
 
-**Templates:**
-- **MERN** — Express server (`server/`) + Vite/React client (`client/`), both with dependencies installed
-- **Express** — Standalone Express API in the project root
-- **React** — Standalone Vite + React app in the project root, pre-wired with `axios` and `react-router-dom`
+CONFIG FILES
+  Everything lives in ~/FlarexProjects/:
 
----
+    flarexConfig.json      Your name, theme, Gemini key, init status.
+    flarexProjects.json    Every tracked project — path, template, git info, dev status, version, issues.
+    flarexLog.json         Daily dev log entries.
 
-### Shipping Code
+  If any of these go missing, run flarex recover.
 
-| Command | Description |
-|---|---|
-| `flarex ship <path> [branch]` | Add, commit, and push. `path` is required (`.` for everything, or a specific file/folder). `branch` defaults to `main`. |
-
-Checks git is initialized and a remote exists before doing anything. If you leave the commit message empty, Flarex reads your staged diff and generates a commit message for you — you can accept it or write your own.
-
-```bash
-flarex ship .                  # commit everything, push to main
-flarex ship server             # commit server/ only
-flarex ship . dev              # commit everything, push to dev
-flarex ship business.tsx dev   # commit one file, push to dev
-```
-
----
-
-### AI Commands
-
-Require a Gemini API key set via `flarex gemini <apikey>`.
-
-| Command | Description |
-|---|---|
-| `flarex error` | Scans recent terminal history for an error. If nothing found, prompts you to paste one. Returns a structured breakdown: error summary, safe fix (check your own code), hard fix (reinstall/update/delete dependencies). |
-| `flarex ask <question>` | Ask Flarex anything — how to use a command, troubleshooting, or general dev questions. |
-| `flarex fix` | Pick a project, browse into its folders, select a file. Choose a quick syntax/bracket/indentation scan or a full logic review. Large files (50KB+) prompt before reading the first 3000 lines only, to keep things fast. |
-
----
-
-### Project Tracking
-
-Every project can track its own development status, version, and issue list — no separate "product" concept, it's all part of the project.
-
-| Command | Description |
-|---|---|
-| `flarex info <project>` | Full project overview — path, template, git, dev status, version, and issue breakdown. |
-| `flarex devstatus <project> <status>` | Set development stage. |
-| `flarex version-set <project> <version>` | Set the project's version string (e.g. `1.0.0`). |
-| `flarex issue-add` | Pick a project, add an issue. Prompts "add another?" so you can batch-add quickly. |
-| `flarex issue-close` | Pick a project, pick from its open issues, close it. |
-| `flarex issue-open` | Pick a project, pick from its closed issues, reopen it. |
-| `flarex issue-list <project>` | List all issues for a project with open/closed counts. |
-
-**Valid dev statuses:**
-```
-pre-alpha  ·  alpha  ·  in-development  ·  beta  ·  bug-testing  ·  shipped
-```
-
----
-
-### Dev Log
-
-| Command | Description |
-|---|---|
-| `flarex log` | Log what you shipped today — pick a project, describe what you did, hours (optional), and status. |
-| `flarex log --week` | Summary of the last 7 days — total entries, hours, status breakdown, per-project counts, timeline. |
-| `flarex log --month` | Same summary, last 30 days. |
-| `flarex log --week --project <name>` | Filter either summary to one project. |
-
----
-
-## Config Files
-
-Everything lives in `~/FlarexProjects/`:
-
-| File | Purpose |
-|---|---|
-| `flarexConfig.json` | Your name, theme, Gemini key, init status. |
-| `flarexProjects.json` | Every tracked project — path, template, git info, dev status, version, issues. |
-| `flarexLog.json` | Daily dev log entries. |
-
-If any of these go missing, run `flarex recover`.
-
----
-
-## Requirements
-
-- Node.js
-- Git (for `ship`, `sync`, and git status detection)
-- A Gemini API key for AI commands (free tier available)
-
----
+REQUIREMENTS
+  - Node.js
+  - Git (for ship, sync, and git status detection)
+  - A Gemini API key for AI commands (free tier available)
 
 Made with care, one terminal session at a time.
-`
+`;
 // FUNCTIONS / HELPERS
 async function clearScreen(){
   await execa("clear", { shell: true, stdio: "inherit" });
@@ -214,11 +162,54 @@ return "Inited"
 }
 
 
+function getTermWidth() {
+  const w = process.stdout.columns || 60;
+  return Math.min(w, 76); // cap width so it doesn't stretch huge on desktop
+}
+
+function boxTop(width) {
+  return chalk.dim("╭" + "─".repeat(width - 2) + "╮");
+}
+
+function boxBottom(width) {
+  return chalk.dim("╰" + "─".repeat(width - 2) + "╯");
+}
+
+function boxLine(content, width, align = "left") {
+  // strip ANSI codes to measure real visible length
+  const visibleLength = content.replace(/\x1b\[[0-9;]*m/g, "").length;
+  const innerWidth = width - 4; // 2 for borders, 2 for padding
+  const padTotal = Math.max(innerWidth - visibleLength, 0);
+
+  let left = 1;
+  let right = padTotal - 1 + 1;
+
+  if (align === "center") {
+    left = Math.floor(padTotal / 2);
+    right = padTotal - left;
+  }
+
+  return (
+    chalk.dim("│") +
+    " " +
+    " ".repeat(Math.max(left, 0)) +
+    content +
+    " ".repeat(Math.max(right, 0)) +
+    " " +
+    chalk.dim("│")
+  );
+}
+
+function boxEmpty(width) {
+  return chalk.dim("│") + " ".repeat(width - 2) + chalk.dim("│");
+}
+
 async function banner() {
-const graySandwich = gradient(['#666666', '#ffffff', '#666666']);
-  const config =  loadConfig()
-const theme = config?.user?.theme || ['cyan', 'magenta']
+  const graySandwich = gradient(["#666666", "#ffffff", "#666666"]);
+  const config = loadConfig();
+  const theme = config?.user?.theme || ["cyan", "magenta"];
   await clearScreen();
+
   cfonts.say("FLAREX", {
     font: "block",
     align: "center",
@@ -229,38 +220,101 @@ const theme = config?.user?.theme || ['cyan', 'magenta']
   });
 
   console.log(center(chalk.bold("Less setup. More ship.")));
-  console.log()
-  console.log(center(chalk.dim("RUN flarex tutorial")));
   console.log();
 
-  if (fs.existsSync(CONFIG_PATH)) {
-    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+  const width = getTermWidth();
 
-    if (config.user?.name) {
-      const name = config.user.name;
+  // ---------------- STATUS BOX ----------------
+  console.log(boxTop(width));
+
+  if (fs.existsSync(CONFIG_PATH)) {
+    const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+
+    if (cfg.user?.name) {
+      const name = cfg.user.name;
       const greetings = [
         `${name}, you're back`,
         `What's up, ${name}?`,
-        `Lock in, ${name}`
+        `Lock in, ${name}`,
       ];
       const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-      console.log()
 
+      console.log(boxLine(chalk.bold(graySandwich(greeting)), width, "center"));
+      console.log(boxEmpty(width));
 
-      console.log(center(chalk.bold(graySandwich(greeting))));
+      // ---------------- PROJECT + ISSUE SUMMARY ----------------
+      let projectsData = { projects: [] };
+      if (fs.existsSync(PROJECTS_PATH)) {
+        projectsData = JSON.parse(fs.readFileSync(PROJECTS_PATH, "utf8"));
+      }
 
+      const projects = projectsData.projects || [];
+      const totalProjects = projects.length;
+      const totalOpenIssues = projects.reduce(
+        (sum, p) => sum + (p.issues || []).filter((i) => i.status === "todo").length,
+        0
+      );
+      const totalClosedIssues = projects.reduce(
+        (sum, p) => sum + (p.issues || []).filter((i) => i.status === "done").length,
+        0
+      );
 
+      console.log(
+        boxLine(
+          chalk.cyan(`◆ ${totalProjects} projects`) +
+            chalk.dim("   ") +
+            chalk.yellow(`○ ${totalOpenIssues} open`) +
+            chalk.dim("   ") +
+            chalk.green(`✓ ${totalClosedIssues} closed`),
+          width,
+          "center"
+        )
+      );
 
-  } else {
-      console.log(center(chalk.gray.bold("> Run 'flare init' to Lock In!")));
+      if (totalProjects > 0) {
+        console.log(boxEmpty(width));
+        projects.slice(0, 5).forEach((p) => {
+          const openCount = (p.issues || []).filter((i) => i.status === "todo").length;
+          const statusDot =
+            p.devStatus === "shipped"
+              ? chalk.green("●")
+              : p.devStatus === "beta"
+              ? chalk.cyan("●")
+              : chalk.yellow("●");
+
+          const line =
+            statusDot +
+            " " +
+            chalk.white(p.name.padEnd(16)) +
+            chalk.dim(`v${p.version || "0.0.0"}`.padEnd(10)) +
+            (openCount > 0 ? chalk.yellow(`${openCount} open`) : chalk.dim("clean"));
+
+          console.log(boxLine(line, width, "left"));
+        });
+
+        if (projects.length > 5) {
+          console.log(
+            boxLine(chalk.dim(`+${projects.length - 5} more — run flarex list`), width, "left")
+          );
+        }
+      }
+    } else {
+      console.log(boxLine(chalk.gray.bold("Run 'flarex init' to lock in"), width, "center"));
     }
   } else {
-    console.log(center(chalk.gray.bold("> Run 'flare init' to Lock In!")));
+    console.log(boxLine(chalk.gray.bold("Run 'flarex init' to lock in"), width, "center"));
   }
 
+  console.log(boxBottom(width));
+  console.log();
+
+  // ---------------- BOTTOM INPUT BAR ----------------
+  console.log(boxTop(width));
+  console.log(boxLine(chalk.dim("❯ ") + chalk.white("flarex <command>"), width, "left"));
+  console.log(boxBottom(width));
+  console.log(center(chalk.dim("flarex tutorial") + chalk.gray("  ·  ") + chalk.dim("flarex commands") + chalk.gray("  ·  ") + chalk.dim("flarex ask")));
   console.log();
 }
-
 
 function readProjects() {
   if (!fs.existsSync(PROJECTS_PATH)) {
