@@ -164,21 +164,24 @@ return "Inited"
 
 function getTermWidth() {
   const w = process.stdout.columns || 60;
-  return Math.min(w, 76); // cap width so it doesn't stretch huge on desktop
+  return Math.min(w, 72);
 }
 
 function boxTop(width) {
-  return chalk.dim("╭" + "─".repeat(width - 2) + "╮");
+  return chalk.gray("╭" + "─".repeat(width - 2) + "╮");
 }
 
 function boxBottom(width) {
-  return chalk.dim("╰" + "─".repeat(width - 2) + "╯");
+  return chalk.gray("╰" + "─".repeat(width - 2) + "╯");
+}
+
+function boxDivider(width) {
+  return chalk.gray("├" + "─".repeat(width - 2) + "┤");
 }
 
 function boxLine(content, width, align = "left") {
-  // strip ANSI codes to measure real visible length
   const visibleLength = content.replace(/\x1b\[[0-9;]*m/g, "").length;
-  const innerWidth = width - 4; // 2 for borders, 2 for padding
+  const innerWidth = width - 4;
   const padTotal = Math.max(innerWidth - visibleLength, 0);
 
   let left = 1;
@@ -190,131 +193,93 @@ function boxLine(content, width, align = "left") {
   }
 
   return (
-    chalk.dim("│") +
+    chalk.gray("│") +
     " " +
     " ".repeat(Math.max(left, 0)) +
     content +
     " ".repeat(Math.max(right, 0)) +
     " " +
-    chalk.dim("│")
+    chalk.gray("│")
   );
 }
 
 function boxEmpty(width) {
-  return chalk.dim("│") + " ".repeat(width - 2) + chalk.dim("│");
+  return chalk.gray("│") + " ".repeat(width - 2) + chalk.gray("│");
+}
+function centerBlock(width) {
+  const termWidth = process.stdout.columns || 80;
+  const pad = Math.max(Math.floor((termWidth - width) / 2), 0);
+  return " ".repeat(pad);
 }
 
 async function banner() {
-  const graySandwich = gradient(["#666666", "#ffffff", "#666666"]);
-  const config = loadConfig();
-  const theme = config?.user?.theme || ["cyan", "magenta"];
   await clearScreen();
+
+  const config = loadConfig();
+  const pad = centerBlock(64);
+  const divider = pad + chalk.gray("─".repeat(64));
 
   cfonts.say("FLAREX", {
     font: "block",
     align: "center",
-    colors: theme,
+    colors: ["white"],
     background: "transparent",
     letterSpacing: 1,
     space: true,
   });
 
-  console.log(center(chalk.bold("Less setup. More ship.")));
+  console.log(center(chalk.gray("Less setup. More ship.")));
   console.log();
 
-  const width = getTermWidth();
-
-  // ---------------- STATUS BOX ----------------
-  console.log(boxTop(width));
-
-  if (fs.existsSync(CONFIG_PATH)) {
-    const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
-
-    if (cfg.user?.name) {
-      const name = cfg.user.name;
-      const greetings = [
-        `${name}, you're back`,
-        `What's up, ${name}?`,
-        `Lock in, ${name}`,
-      ];
-      const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-
-      console.log(boxLine(chalk.bold(graySandwich(greeting)), width, "center"));
-      console.log(boxEmpty(width));
-
-      // ---------------- PROJECT + ISSUE SUMMARY ----------------
-      let projectsData = { projects: [] };
-      if (fs.existsSync(PROJECTS_PATH)) {
-        projectsData = JSON.parse(fs.readFileSync(PROJECTS_PATH, "utf8"));
-      }
-
-      const projects = projectsData.projects || [];
-      const totalProjects = projects.length;
-      const totalOpenIssues = projects.reduce(
-        (sum, p) => sum + (p.issues || []).filter((i) => i.status === "todo").length,
-        0
-      );
-      const totalClosedIssues = projects.reduce(
-        (sum, p) => sum + (p.issues || []).filter((i) => i.status === "done").length,
-        0
-      );
-
-      console.log(
-        boxLine(
-          chalk.cyan(`◆ ${totalProjects} projects`) +
-            chalk.dim("   ") +
-            chalk.yellow(`○ ${totalOpenIssues} open`) +
-            chalk.dim("   ") +
-            chalk.green(`✓ ${totalClosedIssues} closed`),
-          width,
-          "center"
-        )
-      );
-
-      if (totalProjects > 0) {
-        console.log(boxEmpty(width));
-        projects.slice(0, 5).forEach((p) => {
-          const openCount = (p.issues || []).filter((i) => i.status === "todo").length;
-          const statusDot =
-            p.devStatus === "shipped"
-              ? chalk.green("●")
-              : p.devStatus === "beta"
-              ? chalk.cyan("●")
-              : chalk.yellow("●");
-
-          const line =
-            statusDot +
-            " " +
-            chalk.white(p.name.padEnd(16)) +
-            chalk.dim(`v${p.version || "0.0.0"}`.padEnd(10)) +
-            (openCount > 0 ? chalk.yellow(`${openCount} open`) : chalk.dim("clean"));
-
-          console.log(boxLine(line, width, "left"));
-        });
-
-        if (projects.length > 5) {
-          console.log(
-            boxLine(chalk.dim(`+${projects.length - 5} more — run flarex list`), width, "left")
-          );
-        }
-      }
-    } else {
-      console.log(boxLine(chalk.gray.bold("Run 'flarex init' to lock in"), width, "center"));
-    }
-  } else {
-    console.log(boxLine(chalk.gray.bold("Run 'flarex init' to lock in"), width, "center"));
+  if (!config?.user?.name) {
+    console.log(center(chalk.gray("Run") + " " + chalk.white("flarex init") + " " + chalk.gray("to get started")));
+    console.log();
+    return;
   }
 
-  console.log(boxBottom(width));
+  const name = config.user.name;
+  const greetings = [
+    `Welcome back, ${name}`,
+    `Good to see you, ${name}`,
+    `${name}, let's ship something`,
+    `Ready when you are, ${name}`,
+  ];
+  const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+
+  const projectsData = readProjects();
+  const projects = projectsData.projects || [];
+
+  console.log(center(chalk.bold.white(greeting)));
+  console.log();
+  console.log(divider);
   console.log();
 
-  // ---------------- BOTTOM INPUT BAR ----------------
-  console.log(boxTop(width));
-  console.log(boxLine(chalk.dim("❯ ") + chalk.white("flarex <command>"), width, "left"));
-  console.log(boxBottom(width));
-  console.log(center(chalk.dim("flarex tutorial") + chalk.gray("  ·  ") + chalk.dim("flarex commands") + chalk.gray("  ·  ") + chalk.dim("flarex ask")));
+  if (projects.length === 0) {
+    console.log(center(chalk.gray("No projects yet")));
+    console.log(center(chalk.white("flarex create") + chalk.gray(" to start one")));
+  } else {
+    console.log(center(chalk.gray.dim("PROJECTS")));
+    console.log();
+    projects.slice(0, 6).forEach((p) => {
+      console.log(
+        center(chalk.white(p.name.padEnd(20)) + chalk.gray(`v${p.version || "0.1.0"}`))
+      );
+    });
+    if (projects.length > 6) {
+      console.log();
+      console.log(center(chalk.gray(`+${projects.length - 6} more`) + chalk.gray("  ·  flarex list")));
+    }
+  }
+
+  console.log();
+  console.log(divider);
+  console.log();
+  console.log(center(chalk.gray("create") + chalk.gray(" · ") + chalk.gray("ship") + chalk.gray(" · ") + chalk.gray("switch") + chalk.gray(" · ") + chalk.gray("log")));
+  console.log(center(chalk.gray("docs") + chalk.gray(" · ") + chalk.gray("tutorial") + chalk.gray(" · ") + chalk.gray("commands")));
   console.log();
 }
+
+
 
 function readProjects() {
   if (!fs.existsSync(PROJECTS_PATH)) {
