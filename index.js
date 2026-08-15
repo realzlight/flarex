@@ -243,6 +243,7 @@ async function banner() {
     `Good to see you, ${name}`,
     `${name}, let's ship something`,
     `Ready when you are, ${name}`,
+    `Lock in, ${name}.`
   ];
   const greeting = greetings[Math.floor(Math.random() * greetings.length)];
 
@@ -276,6 +277,12 @@ async function banner() {
   console.log();
   console.log(center(chalk.gray("create") + chalk.gray(" · ") + chalk.gray("ship") + chalk.gray(" · ") + chalk.gray("switch") + chalk.gray(" · ") + chalk.gray("log")));
   console.log(center(chalk.gray("docs") + chalk.gray(" · ") + chalk.gray("tutorial") + chalk.gray(" · ") + chalk.gray("commands")));
+  console.log();
+  console.log();
+  console.log();
+  console.log(divider)
+  console.log();
+  console.log();
   console.log();
 }
 
