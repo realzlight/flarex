@@ -1569,7 +1569,7 @@ ${errorMsg}
 
 program
   .command("ask <question...>")
-  .description("Ask Flarex anything — setup, troubleshooting, or general questions")
+  .description("Ask Flarex anything — setup, coding, troubleshooting, or system tasks")
   .action(async (questionArray) => {
     if (!isInit()) {
       console.log();
@@ -1587,9 +1587,9 @@ program
       return;
     }
 
-    const question = questionArray.join(" ");
+    const question = questionArray.join(" ").trim();
 
-    if (!question.trim()) {
+    if (!question) {
       console.log();
       clack.log.error("Please provide a question");
       console.log();
@@ -1603,24 +1603,430 @@ program
 
     const loadingStates = [
       "Flarex is thinking",
-      "Flarex is digging through docs",
+      "Flarex is inspecting your project",
+      "Flarex is running tools",
       "Flarex is connecting the dots",
       "Flarex is almost there",
     ];
+
     let stateIndex = 0;
 
     s.start(loadingStates[0]);
+
     const loadingInterval = setInterval(() => {
       stateIndex = (stateIndex + 1) % loadingStates.length;
       s.message(loadingStates[stateIndex]);
     }, 1200);
 
     let projectsData = { projects: [] };
+
     if (fs.existsSync(PROJECTS_PATH)) {
-      projectsData = JSON.parse(fs.readFileSync(PROJECTS_PATH, "utf8"));
+      projectsData = JSON.parse(
+        fs.readFileSync(PROJECTS_PATH, "utf8")
+      );
     }
 
-    const systemPrompt = `You are Flarex, a CLI assistant running inside a developer's terminal. You are NOT Gemini and must never mention Gemini, Google, or any underlying model. You are Flarex — speak as Flarex.
+    /*
+     * ============================================================
+     * FLAREX TOOLS
+     * ============================================================
+     */
+
+    const tools = [
+      {
+        function_declarations: [
+          {
+            name: "run_bash",
+            description:
+              "Run a bash/shell command in the current working directory. Use this for installing packages, running programs, git commands, checking system state, searching files, etc.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                command: {
+                  type: "STRING",
+                  description: "The shell command to execute",
+                },
+              },
+              required: ["command"],
+            },
+          },
+
+          {
+            name: "read_file",
+            description:
+              "Read the complete contents of a file.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                path: {
+                  type: "STRING",
+                  description: "Path to the file",
+                },
+              },
+              required: ["path"],
+            },
+          },
+
+          {
+            name: "write_file",
+            description:
+              "Create a file or completely replace its contents.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                path: {
+                  type: "STRING",
+                  description: "Path to the file",
+                },
+                content: {
+                  type: "STRING",
+                  description: "New file contents",
+                },
+              },
+              required: ["path", "content"],
+            },
+          },
+
+          {
+            name: "edit_file",
+            description:
+              "Edit an existing file by replacing an exact piece of text with new text.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                path: {
+                  type: "STRING",
+                  description: "Path to the file",
+                },
+                old_text: {
+                  type: "STRING",
+                  description: "Exact text to replace",
+                },
+                new_text: {
+                  type: "STRING",
+                  description: "Replacement text",
+                },
+              },
+              required: ["path", "old_text", "new_text"],
+            },
+          },
+
+          {
+            name: "delete_file",
+            description:
+              "Delete a file or empty directory.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                path: {
+                  type: "STRING",
+                  description: "Path to delete",
+                },
+              },
+              required: ["path"],
+            },
+          },
+
+          {
+            name: "list_directory",
+            description:
+              "List files and directories inside a directory.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                path: {
+                  type: "STRING",
+                  description:
+                    "Directory path. Use '.' for the current directory.",
+                },
+              },
+              required: ["path"],
+            },
+          },
+
+          {
+            name: "create_directory",
+            description:
+              "Create a directory and any missing parent directories.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                path: {
+                  type: "STRING",
+                  description: "Directory path to create",
+                },
+              },
+              required: ["path"],
+            },
+          },
+        ],
+      },
+    ];
+
+    /*
+     * ============================================================
+     * TOOL IMPLEMENTATION
+     * ============================================================
+     */
+
+    async function executeTool(name, args) {
+      try {
+        switch (name) {
+          /*
+           * -------------------------
+           * RUN BASH
+           * -------------------------
+           */
+
+          case "run_bash": {
+            if (!args.command) {
+              return {
+                success: false,
+                error: "No command provided",
+              };
+            }
+
+            s.message(`Running: ${args.command}`);
+
+            try {
+              const result = await execa(args.command, {
+                shell: true,
+                cwd: process.cwd(),
+                reject: false,
+                timeout: 120000,
+                extendEnv: true,
+              });
+
+              return {
+                success: result.exitCode === 0,
+                exitCode: result.exitCode,
+                stdout: result.stdout || "",
+                stderr: result.stderr || "",
+              };
+            } catch (error) {
+              return {
+                success: false,
+                error: error.message,
+                stdout: error.stdout || "",
+                stderr: error.stderr || "",
+              };
+            }
+          }
+
+          /*
+           * -------------------------
+           * READ FILE
+           * -------------------------
+           */
+
+          case "read_file": {
+            const filePath = path.resolve(args.path);
+
+            if (!fs.existsSync(filePath)) {
+              return {
+                success: false,
+                error: `File does not exist: ${args.path}`,
+              };
+            }
+
+            const stat = fs.statSync(filePath);
+
+            if (!stat.isFile()) {
+              return {
+                success: false,
+                error: `${args.path} is not a file`,
+              };
+            }
+
+            const content = fs.readFileSync(filePath, "utf8");
+
+            return {
+              success: true,
+              path: filePath,
+              content,
+            };
+          }
+
+          /*
+           * -------------------------
+           * WRITE FILE
+           * -------------------------
+           */
+
+          case "write_file": {
+            const filePath = path.resolve(args.path);
+
+            fs.mkdirSync(path.dirname(filePath), {
+              recursive: true,
+            });
+
+            fs.writeFileSync(
+              filePath,
+              args.content ?? "",
+              "utf8"
+            );
+
+            return {
+              success: true,
+              path: filePath,
+              message: "File written successfully",
+            };
+          }
+
+          /*
+           * -------------------------
+           * EDIT FILE
+           * -------------------------
+           */
+
+          case "edit_file": {
+            const filePath = path.resolve(args.path);
+
+            if (!fs.existsSync(filePath)) {
+              return {
+                success: false,
+                error: `File does not exist: ${args.path}`,
+              };
+            }
+
+            const original = fs.readFileSync(
+              filePath,
+              "utf8"
+            );
+
+            if (!original.includes(args.old_text)) {
+              return {
+                success: false,
+                error:
+                  "old_text was not found in the file. No changes were made.",
+              };
+            }
+
+            const updated = original.replace(
+              args.old_text,
+              args.new_text
+            );
+
+            fs.writeFileSync(
+              filePath,
+              updated,
+              "utf8"
+            );
+
+            return {
+              success: true,
+              path: filePath,
+              message: "File edited successfully",
+            };
+          }
+
+          /*
+           * -------------------------
+           * DELETE FILE
+           * -------------------------
+           */
+
+          case "delete_file": {
+            const targetPath = path.resolve(args.path);
+
+            if (!fs.existsSync(targetPath)) {
+              return {
+                success: false,
+                error: `Path does not exist: ${args.path}`,
+              };
+            }
+
+            fs.rmSync(targetPath, {
+              recursive: true,
+              force: true,
+            });
+
+            return {
+              success: true,
+              path: targetPath,
+              message: "Deleted successfully",
+            };
+          }
+
+          /*
+           * -------------------------
+           * LIST DIRECTORY
+           * -------------------------
+           */
+
+          case "list_directory": {
+            const dirPath = path.resolve(args.path || ".");
+
+            if (!fs.existsSync(dirPath)) {
+              return {
+                success: false,
+                error: `Directory does not exist: ${args.path}`,
+              };
+            }
+
+            const entries = fs.readdirSync(dirPath, {
+              withFileTypes: true,
+            });
+
+            return {
+              success: true,
+              path: dirPath,
+              entries: entries.map((entry) => ({
+                name: entry.name,
+                type: entry.isDirectory()
+                  ? "directory"
+                  : entry.isFile()
+                    ? "file"
+                    : "other",
+              })),
+            };
+          }
+
+          /*
+           * -------------------------
+           * CREATE DIRECTORY
+           * -------------------------
+           */
+
+          case "create_directory": {
+            const dirPath = path.resolve(args.path);
+
+            fs.mkdirSync(dirPath, {
+              recursive: true,
+            });
+
+            return {
+              success: true,
+              path: dirPath,
+              message: "Directory created successfully",
+            };
+          }
+
+          default:
+            return {
+              success: false,
+              error: `Unknown tool: ${name}`,
+            };
+        }
+      } catch (error) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+    }
+
+    /*
+     * ============================================================
+     * SYSTEM PROMPT
+     * ============================================================
+     */
+
+    const systemPrompt = `
+You are Flarex, an autonomous developer CLI agent running inside a terminal.
+
+CURRENT WORKING DIRECTORY:
+${process.cwd()}
 
 USER CONFIG:
 ${JSON.stringify(config, null, 2)}
@@ -1631,56 +2037,228 @@ ${JSON.stringify(projectsData, null, 2)}
 FLAREX DOCUMENTATION:
 ${FLAREX_DOCS}
 
-RULES:
-- This is a raw terminal, not a code editor. Never use markdown code fences like triple backticks. Never use markdown formatting.
-- Write plain text only.
-- Answer Flarex-related questions first with priority — setup, commands, troubleshooting, config, projects.
-- For general programming questions (what is JavaScript, how async works, etc), answer briefly and clearly.
-- Keep answers short and direct. No greetings, no sign-offs, no fluff.
-- If asked who you are or what model you use, say you are Flarex, nothing else.
+CAPABILITIES:
+You have access to tools that allow you to:
+- run shell/bash commands
+- inspect files
+- read files
+- create files
+- completely rewrite files
+- edit files
+- delete files
+- create directories
 
-Question:
-${question}
+IMPORTANT BEHAVIOR:
+- You are an agent, not merely a question-answering chatbot.
+- When the user asks you to perform an action, actually perform it with tools.
+- Inspect files before modifying them when necessary.
+- Use the appropriate tool instead of merely telling the user how to do something.
+- After a tool returns an error, analyze the error and try to fix the problem.
+- You may use multiple tools in sequence.
+- You can run commands, inspect their output, then make decisions based on the result.
+- Do not claim something was done unless the tool actually succeeded.
+- If a task requires several steps, perform those steps yourself.
+- For coding tasks, inspect the relevant project files before making changes when useful.
+- Keep responses concise and direct.
+- No greetings.
+- No sign-offs.
+- No unnecessary explanations.
+- This is a raw terminal interface.
+- Never use markdown code fences.
+- Prefer plain text.
+- If asked who you are, say "Flarex".
 `;
 
+    /*
+     * ============================================================
+     * GEMINI AGENT LOOP
+     * ============================================================
+     */
+
+    const contents = [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `${systemPrompt}\n\nUSER REQUEST:\n${question}`,
+          },
+        ],
+      },
+    ];
+
+    const MAX_TURNS = 30;
+
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${config.user.geminikey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: systemPrompt }] }],
-          }),
+      for (let turn = 0; turn < MAX_TURNS; turn++) {
+        s.message(
+          turn === 0
+            ? "Flarex is thinking"
+            : "Flarex is processing tool results"
+        );
+
+        const response = await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": config.user.geminikey,
+            },
+
+            body: JSON.stringify({
+              contents,
+
+              tools,
+
+              generationConfig: {
+                temperature: 0.2,
+              },
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+
+          throw new Error(
+            `Gemini API ${response.status}: ${errorText}`
+          );
         }
-      );
 
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        const data = await response.json();
 
-      clearInterval(loadingInterval);
+        const candidate = data.candidates?.[0];
 
-      if (!text) {
-        s.stop(chalk.red("✗") + " No response");
-        console.log();
-        return;
+        if (!candidate) {
+          throw new Error("Gemini returned no candidate");
+        }
+
+        const parts = candidate.content?.parts || [];
+
+        /*
+         * Add Gemini's response to conversation history.
+         *
+         * This is important because the next request needs
+         * to know what tool it requested.
+         */
+
+        contents.push(candidate.content);
+
+        /*
+         * --------------------------------------------------------
+         * FIND TOOL CALLS
+         * --------------------------------------------------------
+         */
+
+        const functionCalls = parts.filter(
+          (part) => part.functionCall
+        );
+
+        /*
+         * No tool calls means Gemini has finished.
+         */
+
+        if (functionCalls.length === 0) {
+          const text = parts
+            .filter((part) => part.text)
+            .map((part) => part.text)
+            .join("\n")
+            .trim();
+
+          clearInterval(loadingInterval);
+
+          if (!text) {
+            s.stop(chalk.red("✗") + " No response");
+            console.log();
+            return;
+          }
+
+          s.stop(chalk.green("✓") + " Flarex completed");
+
+          console.log();
+          console.log(boxen(chalk.white(text)));
+          console.log();
+
+          clack.outro(chalk.green("Done"));
+
+          return;
+        }
+
+        /*
+         * --------------------------------------------------------
+         * EXECUTE EVERY TOOL CALL
+         * --------------------------------------------------------
+         */
+
+        const toolResponses = [];
+
+        for (const part of functionCalls) {
+          const call = part.functionCall;
+
+          const toolName = call.name;
+          const args = call.args || {};
+
+          s.message(
+            `${chalk.hex("#f97316")(toolName)}`
+          );
+
+          const result = await executeTool(
+            toolName,
+            args
+          );
+
+          /*
+           * Send tool result back to Gemini.
+           */
+
+          toolResponses.push({
+            functionResponse: {
+              name: toolName,
+              response: {
+                result,
+              },
+            },
+          });
+        }
+
+        contents.push({
+          role: "user",
+          parts: toolResponses,
+        });
       }
 
-      s.stop(chalk.green("✓") + " Flarex answered");
-      console.log();
-      console.log(boxen(chalk.white(text)))
+      clearInterval(loadingInterval);
+
+      s.stop(
+        chalk.yellow("!") +
+        " Flarex reached the maximum tool-call limit"
+      );
+
       console.log();
 
-      clack.outro(chalk.green("Done"));
+      clack.log.warn(
+        "The task was stopped after too many agent steps."
+      );
+
+      console.log();
     } catch (err) {
       clearInterval(loadingInterval);
-      s.stop(chalk.red("✗") + " Request failed");
+
+      s.stop(
+        chalk.red("✗") +
+        " Flarex request failed"
+      );
+
       console.log();
-      clack.log.error(err.message);
+
+      clack.log.error(
+        err?.message || String(err)
+      );
+
       console.log();
     }
   });
-
 
 
 program
