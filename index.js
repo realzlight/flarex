@@ -72,7 +72,7 @@ AI Commands
   Require a Gemini API key set via flarex gemini <apikey>.
 
   flarex error                   Scans recent terminal history for an error. If nothing found, prompts you to paste one. Returns a structured breakdown: error summary, safe fix (check your own code), hard fix (reinstall/update/delete dependencies).
-  flarex ask <question>          Ask Flarex anything — how to use a command, troubleshooting, or general dev questions.
+  flarex ask <question>          Ask Flarex anything — how to use a command, troubleshooting, file editing, debugging or any agentic work, or general dev questions.
   flarex fix                     Pick a project, browse into its folders, select a file. Choose a quick syntax/bracket/indentation scan or a full logic review. Large files (50KB+) prompt before reading the first 3000 lines only, to keep things fast.
 
 Project Tracking
@@ -256,7 +256,7 @@ async function banner() {
   console.log();
 
   if (projects.length === 0) {
-    console.log(center(chalk.gray("No projects yet")));
+    console.log(center(chalk.gray("No projects yet — When you feel stuck do flarex ask and tell him about your problem on flarex usage!")));
     console.log(center(chalk.white("flarex create") + chalk.gray(" to start one")));
   } else {
     console.log(center(chalk.gray.dim("PROJECTS")));
@@ -276,7 +276,7 @@ async function banner() {
   console.log(divider);
   console.log();
   console.log(center(chalk.gray("create") + chalk.gray(" · ") + chalk.gray("ship") + chalk.gray(" · ") + chalk.gray("switch") + chalk.gray(" · ") + chalk.gray("log")));
-  console.log(center(chalk.gray("docs") + chalk.gray(" · ") + chalk.gray("tutorial") + chalk.gray(" · ") + chalk.gray("commands")));
+  console.log(center(chalk.gray("docs") + chalk.gray(" · ") + chalk.gray("ask - for file editing, and other queries!") + chalk.gray(" · ") + chalk.gray("commands")));
   console.log();
   console.log();
   console.log();
