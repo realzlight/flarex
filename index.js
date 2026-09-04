@@ -1197,24 +1197,23 @@ program
     console.log();
     s.start("Registering project");
     const projects = readProjects();
-projects.projects.push({
-  name: projectname,
-  safeName: safeName,
-  path: FullPath,
-  template: template,
-  status: "active",
-  git: { initialized: false, remote: null },
-  devStatus: "in-development",
-  version: "0.1.0",
-  issues: [],
-});
+    projects.projects.push({
+      name: folderName,
+      safeName: safeName,
+      path: destPath,
+      template: template,
+      status: "active",
+      git: { initialized: gitInitialized, remote: gitRemote },
+      devStatus: "in-development",
+      version: "0.1.0",
+      issues: [],
+    });
     writeProjects(projects);
     s.stop(chalk.green("✓") + " Project registered");
 
     console.log();
     clack.outro(chalk.green(`"${folderName}" added as ${template}`));
   });
-
 // REMOVE
 program
   .command("remove <projectName>")
